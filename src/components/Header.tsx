@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Menu as MenuIcon, X, Phone, Clock, ShieldCheck } from 'lucide-react';
+import { ShoppingBag, Menu as MenuIcon, X, Phone, Clock, ShieldCheck, User, UserCheck } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { useCart } from '../context/CartContext';
+import { useCustomer } from '../context/CustomerContext';
 
 interface HeaderProps {
   currentView: string;
   onNavigate: (view: string) => void;
+  onOpenAccountModal?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate }) => {
+export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate, onOpenAccountModal }) => {
   const { settings, isOpenNow } = useStore();
   const { totalItemsCount, setIsCartDrawerOpen } = useCart();
+  const { customer, openAuthModal } = useCustomer();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navLinks = [
@@ -45,8 +48,24 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate }) => {
             </span>
           </div>
           <div className="flex items-center gap-3 ml-auto">
+            {customer ? (
+              <button 
+                onClick={() => onOpenAccountModal?.()} 
+                className="flex items-center gap-1 font-bold text-amber-200 hover:text-white transition-colors cursor-pointer"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-[#F5BD42]" />
+                <span className="max-w-[120px] truncate">{customer.full_name}</span>
+              </button>
+            ) : (
+              <button 
+                onClick={() => openAuthModal('login')} 
+                className="hover:text-[#F5BD42] transition-colors cursor-pointer"
+              >
+                Đăng nhập / Đăng ký
+              </button>
+            )}
             {settings?.phone && (
-              <a href={`tel:${settings.phone.replace(/\s+/g, '')}`} className="flex items-center gap-1 hover:text-[#F5BD42] transition-colors">
+              <a href={`tel:${settings.phone.replace(/\s+/g, '')}`} className="hidden sm:flex items-center gap-1 hover:text-[#F5BD42] transition-colors">
                 <Phone className="w-3 h-3 text-[#F5BD42]" />
                 <span className="font-semibold">{settings.phone}</span>
               </a>
@@ -123,6 +142,22 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate }) => {
               className="hidden sm:inline-flex items-center gap-2 bg-[#8C4A26] hover:bg-[#753A1B] text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5 cursor-pointer"
             >
               <span>Đặt món</span>
+            </button>
+
+            {/* User Profile Button */}
+            <button
+              onClick={() => {
+                if (customer) {
+                  onOpenAccountModal?.();
+                } else {
+                  openAuthModal('login');
+                }
+              }}
+              className="p-2.5 rounded-xl bg-white border border-[#F5BD42]/60 hover:bg-[#F5BD42]/10 text-[#4A2115] transition-all cursor-pointer shadow-xs flex items-center gap-1.5"
+              title={customer ? `Tài khoản ${customer.full_name}` : 'Đăng nhập / Đăng ký'}
+            >
+              {customer ? <UserCheck className="w-5 h-5 text-emerald-600" /> : <User className="w-5 h-5 text-[#8C4A26]" />}
+              {customer && <span className="text-xs font-bold hidden xl:inline max-w-[100px] truncate">{customer.full_name}</span>}
             </button>
 
             {/* Cart Button */}

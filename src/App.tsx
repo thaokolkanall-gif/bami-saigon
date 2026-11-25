@@ -23,6 +23,9 @@ import { AdminContent } from './pages/admin/AdminContent';
 import { AdminOperations } from './pages/admin/AdminOperations';
 import { AdminPromotions } from './pages/admin/AdminPromotions';
 import { AdminAuditLogs } from './pages/admin/AdminAuditLogs';
+import { AdminCustomers } from './pages/admin/AdminCustomers';
+import { CustomerAuthModal } from './components/CustomerAuthModal';
+import { CustomerAccountModal } from './components/CustomerAccountModal';
 import { useStore } from './context/StoreContext';
 
 export default function App() {
@@ -31,6 +34,7 @@ export default function App() {
   const [trackingToken, setTrackingToken] = useState('');
   const [adminTab, setAdminTab] = useState('dashboard');
   const [adminOrdersInitialFilter, setAdminOrdersInitialFilter] = useState('all');
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
 
   // Admin Auth state
   const [currentUser, setCurrentUser] = useState<any>(() => {
@@ -140,6 +144,7 @@ export default function App() {
         {adminTab === 'ai' && <AdminAIAssistant />}
         {adminTab === 'content' && <AdminContent />}
         {adminTab === 'operations' && <AdminOperations />}
+        {adminTab === 'customers' && <AdminCustomers />}
         {adminTab === 'promotions' && <AdminPromotions />}
         {adminTab === 'logs' && <AdminAuditLogs />}
       </AdminLayout>
@@ -153,6 +158,7 @@ export default function App() {
       <Header
         currentView={currentView}
         onNavigate={(view) => navigateTo(view)}
+        onOpenAccountModal={() => setIsAccountModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -205,6 +211,17 @@ export default function App() {
       {/* Slide-out Cart Drawer */}
       <CartDrawer
         onCheckout={() => navigateTo('checkout')}
+      />
+
+      {/* Customer Modals */}
+      <CustomerAuthModal />
+      <CustomerAccountModal
+        isOpen={isAccountModalOpen}
+        onClose={() => setIsAccountModalOpen(false)}
+        onTrackOrder={(tok) => {
+          setTrackingToken(tok);
+          navigateTo('track');
+        }}
       />
     </div>
   );

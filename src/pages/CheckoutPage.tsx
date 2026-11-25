@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, CheckCircle2, ShieldCheck, MapPin, Store, CreditCard, Banknote, AlertCircle, Sparkles, Navigation, ExternalLink } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useStore } from '../context/StoreContext';
+import { useCustomer } from '../context/CustomerContext';
 import { DeliveryMapPicker } from '../components/DeliveryMapPicker';
 import confetti from 'canvas-confetti';
 
@@ -13,12 +14,22 @@ interface CheckoutPageProps {
 export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrderSuccess }) => {
   const { items, subtotal, clearCart, promoCode, setPromoCode, discountAmount, setDiscountAmount } = useCart();
   const { settings } = useStore();
+  const { customer } = useCustomer();
 
   const [orderType, setOrderType] = useState<'pickup' | 'delivery'>('delivery');
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [address, setAddress] = useState('');
-  const [addressNote, setAddressNote] = useState('');
+  const [customerName, setCustomerName] = useState(customer?.full_name || '');
+  const [customerPhone, setCustomerPhone] = useState(customer?.phone || '');
+  const [address, setAddress] = useState(customer?.default_address || '');
+  const [addressNote, setAddressNote] = useState(customer?.default_address_note || '');
+
+  useEffect(() => {
+    if (customer) {
+      if (!customerName) setCustomerName(customer.full_name || '');
+      if (!customerPhone) setCustomerPhone(customer.phone || '');
+      if (!address && customer.default_address) setAddress(customer.default_address);
+      if (!addressNote && customer.default_address_note) setAddressNote(customer.default_address_note);
+    }
+  }, [customer]);
   
   // Distance-based map delivery state
   const storeLat = parseFloat(settings?.store_lat || '10.771971');
@@ -124,7 +135,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
         note: item.note
       })),
       promo_code: promoCode || null,
-      idempotency_key: idempotencyKey
+      idempotency_key: idempotencyKey,
+      customer_id: customer?.id || null,
+      is_prepaid: paymentMethod === 'transfer' ? 1 : 0
     };
 
     try {
@@ -421,11 +434,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
                   <div className="flex items-center gap-2">
                     <CreditCard className="w-4 h-4 text-[#8C4A26]" />
                     <span className="font-bold text-sm text-[#4A2115]">
-                      Chuyển khoản VietQR (Ngân hàng)
+                      Chuyển khoản VietQR (Thanh toán trước — Shipper không thu tiền)
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    Quét mã QR qua ứng dụng ngân hàng. Chủ quán sẽ kiểm tra và xác nhận biên lai.
+                    Quét mã QR qua ứng dụng ngân hàng. Hệ thống tự động nhận diện đã thanh toán, shipper sẽ giao bánh mà không thu tiền mặt.
                   </p>
 
                   {/* VietQR Dynamic Preview */}

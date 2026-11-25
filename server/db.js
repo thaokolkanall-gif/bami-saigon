@@ -168,6 +168,22 @@ function initDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Customers / Registered Members table
+    CREATE TABLE IF NOT EXISTS customers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      phone TEXT UNIQUE NOT NULL,
+      email TEXT,
+      full_name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      default_address TEXT,
+      default_address_note TEXT,
+      is_active INTEGER DEFAULT 1,
+      reset_token TEXT,
+      reset_token_expires DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- AI Assistant Change Logs (with Revert support)
     CREATE TABLE IF NOT EXISTS ai_change_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -194,6 +210,10 @@ function initDatabase() {
   try { db.exec(`ALTER TABLE orders ADD COLUMN distance_km REAL DEFAULT 0;`); } catch(e){}
   try { db.exec(`ALTER TABLE orders ADD COLUMN customer_lat REAL;`); } catch(e){}
   try { db.exec(`ALTER TABLE orders ADD COLUMN customer_lng REAL;`); } catch(e){}
+  try { db.exec(`ALTER TABLE orders ADD COLUMN customer_id INTEGER;`); } catch(e){}
+  try { db.exec(`ALTER TABLE orders ADD COLUMN paid_at DATETIME;`); } catch(e){}
+  try { db.exec(`ALTER TABLE orders ADD COLUMN transaction_ref TEXT;`); } catch(e){}
+  try { db.exec(`ALTER TABLE orders ADD COLUMN is_prepaid INTEGER DEFAULT 0;`); } catch(e){}
 
   // 1. Seed default data if categories empty
   seedDefaultData();
@@ -233,6 +253,9 @@ function initDatabase() {
   ensureSetting.run('fee_per_km', '5000');
   ensureSetting.run('max_delivery_km', '15');
   ensureSetting.run('google_map_url', 'https://maps.google.com/?q=10.771971,106.692237');
+  ensureSetting.run('admin_recovery_key', 'BAMI_ADMIN_MASTER_KEY_2026');
+  ensureSetting.run('webhook_secret', 'bami_webhook_sec_2026');
+  ensureSetting.run('sepay_api_key', '');
 }
 
 function seedDefaultData() {

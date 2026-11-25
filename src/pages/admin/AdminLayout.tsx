@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, ShoppingBag, UtensilsCrossed, Bot, Settings, 
-  Tag, Sliders, FileText, Bell, Volume2, VolumeX, LogOut, ChevronRight, Menu, X, ArrowUpRight
+  Tag, Sliders, FileText, Bell, Volume2, VolumeX, LogOut, ChevronRight, Menu, X, ArrowUpRight, Users
 } from 'lucide-react';
 import { soundChime } from '../../components/NotificationAudio';
 import { useStore } from '../../context/StoreContext';
@@ -71,6 +71,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     { id: 'ai', label: 'Trợ lý AI tiếng Việt', icon: Bot, isHighlight: true },
     { id: 'content', label: 'Nội dung Website', icon: FileText, ownerOnly: true },
     { id: 'operations', label: 'Vận hành & Giao hàng', icon: Sliders, ownerOnly: true },
+    { id: 'customers', label: 'Khách hàng', icon: Users, ownerOnly: true },
     { id: 'promotions', label: 'Ưu đãi & Voucher', icon: Tag, ownerOnly: true },
     { id: 'logs', label: 'Nhật ký thao tác', icon: Settings, ownerOnly: true },
   ];

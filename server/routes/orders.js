@@ -79,7 +79,9 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
     payment_method,
     items,
     promo_code,
-    idempotency_key
+    idempotency_key,
+    customer_id,
+    is_prepaid
   } = req.body;
 
   // Validation
@@ -250,8 +252,8 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
         order_code, tracking_token, customer_name, customer_phone, order_type,
         address, address_note, distance_km, customer_lat, customer_lng, pickup_time, order_note,
         payment_method, payment_status, status, subtotal, discount_amount,
-        delivery_fee, total_amount, idempotency_key
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid', 'new', ?, ?, ?, ?, ?)
+        delivery_fee, total_amount, idempotency_key, customer_id, is_prepaid
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid', 'new', ?, ?, ?, ?, ?, ?, ?)
     `).run(
       orderCode,
       trackingToken,
@@ -270,7 +272,9 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
       discountAmount,
       deliveryFee,
       totalAmount,
-      idempotency_key || null
+      idempotency_key || null,
+      customer_id || null,
+      (payment_method === 'transfer' || is_prepaid) ? 1 : 0
     );
 
     const orderId = orderResult.lastInsertRowid;
@@ -569,4 +573,5 @@ router.get('/admin/stats/overview', authenticateToken, (req, res) => {
   });
 });
 
+router.broadcastOrderEvent = broadcastOrderEvent;
 module.exports = router;

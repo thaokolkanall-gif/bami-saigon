@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sliders, Check, AlertTriangle, Clock, MapPin, Navigation, Compass, ExternalLink, Calculator } from 'lucide-react';
+import { Sliders, Check, AlertTriangle, Clock, MapPin, Navigation, Compass, ExternalLink, Calculator, CreditCard, Key, Copy, Zap } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 
 export const AdminOperations: React.FC = () => {
@@ -23,8 +23,18 @@ export const AdminOperations: React.FC = () => {
   const [feePerKm, setFeePerKm] = useState(settings?.fee_per_km || '5000');
   const [maxKm, setMaxKm] = useState(settings?.max_delivery_km || '15');
 
+  // Bank & Auto Payment Webhook Settings
+  const [bankName, setBankName] = useState(settings?.bank_name || 'Techcombank');
+  const [bankAccount, setBankAccount] = useState(settings?.bank_account || '1903688899901');
+  const [bankOwner, setBankOwner] = useState(settings?.bank_owner || 'BAMI SAI GON');
+  const [webhookSecret, setWebhookSecret] = useState(settings?.webhook_secret || 'bami_webhook_sec_2026');
+  const [adminRecoveryKey, setAdminRecoveryKey] = useState(settings?.admin_recovery_key || 'BAMI_ADMIN_MASTER_KEY_2026');
+
   // Simulator
   const [simKm, setSimKm] = useState<number>(3.5);
+  const [testOrderCode, setTestOrderCode] = useState('');
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
 
   const [feedback, setFeedback] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -46,6 +56,11 @@ export const AdminOperations: React.FC = () => {
       setBaseFee(settings.base_shipping_fee || '15000');
       setFeePerKm(settings.fee_per_km || '5000');
       setMaxKm(settings.max_delivery_km || '15');
+      setBankName(settings.bank_name || 'Techcombank');
+      setBankAccount(settings.bank_account || '1903688899901');
+      setBankOwner(settings.bank_owner || 'BAMI SAI GON');
+      setWebhookSecret(settings.webhook_secret || 'bami_webhook_sec_2026');
+      setAdminRecoveryKey(settings.admin_recovery_key || 'BAMI_ADMIN_MASTER_KEY_2026');
     }
   }, [settings]);
 
@@ -93,6 +108,47 @@ export const AdminOperations: React.FC = () => {
     );
   };
 
+  // Test Auto Payment Webhook Simulation
+  const handleTestSimulatePayment = async () => {
+    if (!testOrderCode.trim()) {
+      alert('Vui lòng nhập mã đơn (ví dụ: BM1234)');
+      return;
+    }
+
+    setIsSimulating(true);
+    const token = localStorage.getItem('bami_token');
+    try {
+      const res = await fetch('/api/payments/simulate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ order_code: testOrderCode.trim() })
+      });
+      const data = await res.json();
+      setIsSimulating(false);
+      if (res.ok) {
+        alert(`✅ ${data.message}\nĐơn hàng đã được tự động cập nhật "Đã thanh toán trước" trong hệ thống!`);
+        setTestOrderCode('');
+      } else {
+        alert(data.error || 'Giả lập thanh toán thất bại');
+      }
+    } catch (e) {
+      setIsSimulating(false);
+      alert('Lỗi kết nối máy chủ');
+    }
+  };
+
+  // Webhook URL
+  const webhookUrl = `${window.location.origin}/api/payments/webhook`;
+
+  const handleCopyWebhook = () => {
+    navigator.clipboard.writeText(webhookUrl);
+    setCopiedWebhook(true);
+    setTimeout(() => setCopiedWebhook(false), 2000);
+  };
+
   // Save all settings
   const handleSaveAll = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -119,12 +175,17 @@ export const AdminOperations: React.FC = () => {
           base_shipping_km: baseKm,
           base_shipping_fee: baseFee,
           fee_per_km: feePerKm,
-          max_delivery_km: maxKm
+          max_delivery_km: maxKm,
+          bank_name: bankName,
+          bank_account: bankAccount,
+          bank_owner: bankOwner,
+          webhook_secret: webhookSecret,
+          admin_recovery_key: adminRecoveryKey
         })
       });
 
       if (res.ok) {
-        setFeedback('Đã lưu cấu hình vận hành và phí giao hàng theo km thành công!');
+        setFeedback('Đã lưu cấu hình vận hành, phí giao hàng km và Webhook thành công!');
         await refreshSettings();
         setTimeout(() => setFeedback(''), 4000);
       } else {
@@ -142,10 +203,10 @@ export const AdminOperations: React.FC = () => {
       
       <div>
         <h1 className="font-display font-black text-2xl sm:text-3xl text-[#4A2115]">
-          Cài Đặt Vận Hành & Phí Giao Hàng Google Maps
+          Cài Đặt Vận Hành & Thanh Toán Tự Động
         </h1>
         <p className="text-xs text-gray-500 mt-1">
-          Hệ thống tự động đo khoảng cách (km) từ vị trí quán đến khách hàng để tính phí ship chuẩn xác theo cài đặt.
+          Bật tắt nhận đơn, tính phí ship theo số km Google Maps, đối soát chuyển khoản ngân hàng và khóa khôi phục admin.
         </p>
       </div>
 
@@ -270,10 +331,6 @@ export const AdminOperations: React.FC = () => {
           </button>
         </div>
 
-        <p className="text-xs text-gray-600 leading-relaxed">
-          Tọa độ này được dùng làm tâm để tự động đo khoảng cách giao bánh đến nhà khách và hiển thị chỉ đường Google Maps cho khách ghé quán.
-        </p>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-[#4A2115] mb-1">
@@ -284,7 +341,7 @@ export const AdminOperations: React.FC = () => {
               required
               value={storeLat}
               onChange={(e) => setStoreLat(e.target.value)}
-              placeholder="Ví dụ: 10.771971"
+              placeholder="10.771971"
               className="w-full px-3 py-2.5 text-xs rounded-xl border border-amber-200 font-mono"
             />
           </div>
@@ -298,7 +355,7 @@ export const AdminOperations: React.FC = () => {
               required
               value={storeLng}
               onChange={(e) => setStoreLng(e.target.value)}
-              placeholder="Ví dụ: 106.692237"
+              placeholder="106.692237"
               className="w-full px-3 py-2.5 text-xs rounded-xl border border-amber-200 font-mono"
             />
           </div>
@@ -307,7 +364,7 @@ export const AdminOperations: React.FC = () => {
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="block text-xs font-bold text-[#4A2115]">
-              Đường dẫn Google Maps của quán (Tùy chọn)
+              Đường dẫn Google Maps của quán
             </label>
             <a
               href={`https://www.google.com/maps?q=${storeLat},${storeLng}`}
@@ -323,12 +380,9 @@ export const AdminOperations: React.FC = () => {
             type="url"
             value={googleMapUrl}
             onChange={(e) => setGoogleMapUrl(e.target.value)}
-            placeholder="Ví dụ: https://maps.app.goo.gl/... hoặc https://www.google.com/maps/..."
+            placeholder="https://maps.app.goo.gl/... hoặc để trống để hệ thống tự tạo"
             className="w-full px-3 py-2.5 text-xs rounded-xl border border-amber-200"
           />
-          <p className="text-[11px] text-gray-500 mt-1">
-            Nếu để trống, hệ thống sẽ tự động dùng tọa độ GPS ở trên để tạo liên kết chỉ đường Google Maps.
-          </p>
         </div>
       </div>
 
@@ -341,16 +395,14 @@ export const AdminOperations: React.FC = () => {
 
         <div className="p-4 rounded-2xl bg-[#FFF8E8] border border-amber-200 text-xs text-[#4A2115] space-y-1">
           <p className="font-bold">💡 Công thức tính phí:</p>
-          <p>• Dưới hoặc bằng <strong>{baseKm} km</strong> đầu tiên: Cố định <strong>{parseInt(baseFee).toLocaleString('vi-VN')}đ</strong></p>
-          <p>• Từ km thứ <strong>{parseFloat(baseKm) + 0.1}</strong> trở đi: Mỗi 1 km tiếp theo cộng thêm <strong>{parseInt(feePerKm).toLocaleString('vi-VN')}đ</strong> (làm tròn lên theo km)</p>
-          <p>• Quá bán kính <strong>{maxKm} km</strong>: Hệ thống tự động báo vượt quá cự ly giao và yêu cầu khách nhận tại quán.</p>
+          <p>• Dưới hoặc bằng <strong>{baseKm} km</strong> đầu: Cố định <strong>{parseInt(baseFee).toLocaleString('vi-VN')}đ</strong></p>
+          <p>• Mỗi km tiếp theo: Cộng thêm <strong>{parseInt(feePerKm).toLocaleString('vi-VN')}đ/km</strong></p>
+          <p>• Vượt quá bán kính <strong>{maxKm} km</strong>: Hệ thống tự động báo vượt cự ly và yêu cầu nhận tại quán.</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
-            <label className="block text-xs font-bold text-[#4A2115] mb-1">
-              Số km đầu tiên (km) *
-            </label>
+            <label className="block text-xs font-bold text-[#4A2115] mb-1">Số km đầu tiên (km) *</label>
             <input
               type="number"
               step="0.5"
@@ -360,13 +412,10 @@ export const AdminOperations: React.FC = () => {
               onChange={(e) => setBaseKm(e.target.value)}
               className="w-full px-3 py-2 text-xs rounded-xl border border-amber-200 font-bold"
             />
-            <p className="text-[10px] text-gray-500 mt-1">Mặc định: 2 km</p>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-[#4A2115] mb-1">
-              Phí số km đầu (VNĐ) *
-            </label>
+            <label className="block text-xs font-bold text-[#4A2115] mb-1">Phí số km đầu (VNĐ) *</label>
             <input
               type="number"
               step="1000"
@@ -376,13 +425,10 @@ export const AdminOperations: React.FC = () => {
               onChange={(e) => setBaseFee(e.target.value)}
               className="w-full px-3 py-2 text-xs rounded-xl border border-amber-200 font-bold text-[#8C4A26]"
             />
-            <p className="text-[10px] text-gray-500 mt-1">Mặc định: 15.000đ</p>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-[#4A2115] mb-1">
-              Phí mỗi km tiếp theo (VNĐ) *
-            </label>
+            <label className="block text-xs font-bold text-[#4A2115] mb-1">Phí mỗi km tiếp theo (VNĐ) *</label>
             <input
               type="number"
               step="500"
@@ -392,13 +438,10 @@ export const AdminOperations: React.FC = () => {
               onChange={(e) => setFeePerKm(e.target.value)}
               className="w-full px-3 py-2 text-xs rounded-xl border border-amber-200 font-bold text-[#8C4A26]"
             />
-            <p className="text-[10px] text-gray-500 mt-1">Mặc định: 5.000đ/km</p>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-[#4A2115] mb-1">
-              Bán kính giao tối đa (km) *
-            </label>
+            <label className="block text-xs font-bold text-[#4A2115] mb-1">Bán kính giao tối đa (km) *</label>
             <input
               type="number"
               step="1"
@@ -408,11 +451,10 @@ export const AdminOperations: React.FC = () => {
               onChange={(e) => setMaxKm(e.target.value)}
               className="w-full px-3 py-2 text-xs rounded-xl border border-amber-200 font-bold text-rose-700"
             />
-            <p className="text-[10px] text-gray-500 mt-1">Mặc định: 15 km</p>
           </div>
         </div>
 
-        {/* 4. Interactive Live Fee Simulator */}
+        {/* Live Simulator */}
         <div className="p-4 rounded-2xl bg-gray-50 border border-gray-200 space-y-3">
           <div className="flex items-center gap-2">
             <Calculator className="w-4 h-4 text-[#8C4A26]" />
@@ -452,6 +494,135 @@ export const AdminOperations: React.FC = () => {
         </div>
       </div>
 
+      {/* 4. 🌟 SECTION: Auto Payment Webhook (SePay / Casso) */}
+      <div className="bg-white rounded-3xl border border-amber-200/80 p-6 shadow-xs space-y-5">
+        <h3 className="font-bold text-base text-[#4A2115] border-b border-amber-100 pb-2 flex items-center gap-2">
+          <CreditCard className="w-4 h-4 text-[#8C4A26]" />
+          <span>Tự Động Cập Nhật "Đã Thanh Toán" Khi Khách Chuyển Khoản (Webhook)</span>
+        </h3>
+
+        <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 text-xs text-[#4A2115] space-y-2">
+          <p className="font-bold">⚡ Cơ chế hoạt động:</p>
+          <p>
+            Mỗi khi khách hàng quét mã VietQR chuyển tiền vào tài khoản ngân hàng của quán, dịch vụ đối soát (như <strong>SePay</strong> hoặc <strong>Casso</strong>) sẽ tự động gửi thông báo về Webhook này. Hệ thống sẽ so khớp mã đơn hàng (ví dụ: <code>BM8924</code>) và tự động đổi trạng thái đơn sang <strong>"Đã thanh toán trước"</strong> ngay tức thì!
+          </p>
+        </div>
+
+        {/* Webhook Endpoint Box */}
+        <div className="space-y-2">
+          <label className="block text-xs font-bold text-[#4A2115]">
+            Đường dẫn Webhook của bạn (Dán vào SePay / Casso):
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              readOnly
+              value={webhookUrl}
+              className="flex-1 px-3.5 py-2.5 rounded-xl border border-amber-300 bg-gray-50 font-mono text-xs text-[#4A2115]"
+            />
+            <button
+              type="button"
+              onClick={handleCopyWebhook}
+              className="px-4 py-2.5 bg-[#8C4A26] hover:bg-[#753A1B] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+            >
+              {copiedWebhook ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              <span>{copiedWebhook ? 'Đã chép!' : 'Sao chép link'}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+          <div>
+            <label className="block text-xs font-bold text-[#4A2115] mb-1">Ngân hàng thụ hưởng</label>
+            <input
+              type="text"
+              value={bankName}
+              onChange={(e) => setBankName(e.target.value)}
+              placeholder="Techcombank, MBBank..."
+              className="w-full px-3 py-2 text-xs rounded-xl border border-amber-200"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-[#4A2115] mb-1">Số tài khoản nhận tiền</label>
+            <input
+              type="text"
+              value={bankAccount}
+              onChange={(e) => setBankAccount(e.target.value)}
+              placeholder="1903..."
+              className="w-full px-3 py-2 text-xs rounded-xl border border-amber-200 font-mono font-bold"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-[#4A2115] mb-1">Tên chủ tài khoản</label>
+            <input
+              type="text"
+              value={bankOwner}
+              onChange={(e) => setBankOwner(e.target.value.toUpperCase())}
+              placeholder="NGUYEN VAN A"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-amber-200 uppercase"
+            />
+          </div>
+        </div>
+
+        {/* Webhook Test Simulator */}
+        <div className="p-4 rounded-2xl bg-amber-50/40 border border-amber-200/80 space-y-3">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-amber-700" />
+            <h4 className="font-bold text-xs uppercase tracking-wider text-[#4A2115]">
+              Công cụ thử nghiệm tự động nhận diện thanh toán (Simulator)
+            </h4>
+          </div>
+          <p className="text-[11px] text-gray-500">
+            Nhập mã đơn hàng hiện có để thử nghiệm cơ chế tự động chuyển trạng thái "Đã thanh toán trước" mà không cần chuyển tiền thật.
+          </p>
+
+          <div className="flex gap-2 max-w-md">
+            <input
+              type="text"
+              value={testOrderCode}
+              onChange={(e) => setTestOrderCode(e.target.value.toUpperCase())}
+              placeholder="Nhập mã đơn (Ví dụ: BM8924)..."
+              className="flex-1 px-3 py-2 text-xs rounded-xl border border-amber-300 uppercase font-mono font-bold"
+            />
+            <button
+              type="button"
+              disabled={isSimulating}
+              onClick={handleTestSimulatePayment}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer shadow-xs"
+            >
+              {isSimulating ? 'Đang bắn...' : 'Thử nghiệm ngay'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. 🔑 SECTION: Emergency Admin Recovery Key */}
+      <div className="bg-white rounded-3xl border border-amber-200/80 p-6 shadow-xs space-y-4">
+        <h3 className="font-bold text-base text-[#4A2115] border-b border-amber-100 pb-2 flex items-center gap-2">
+          <Key className="w-4 h-4 text-[#8C4A26]" />
+          <span>Khóa Khôi Phục Khẩn Cấp Admin (Master Recovery Key)</span>
+        </h3>
+
+        <p className="text-xs text-gray-600 leading-relaxed">
+          Khóa này dùng để đặt lại mật khẩu cho tài khoản <code>admin</code> tại trang <strong>/admin/recovery</strong> bất cứ khi nào bạn quên mật khẩu quản trị.
+        </p>
+
+        <div className="max-w-md">
+          <label className="block text-xs font-bold text-[#4A2115] mb-1">
+            Khóa khôi phục bí mật (Chỉ riêng bạn biết) *
+          </label>
+          <input
+            type="text"
+            required
+            value={adminRecoveryKey}
+            onChange={(e) => setAdminRecoveryKey(e.target.value)}
+            className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-amber-300 font-mono font-bold text-[#8C4A26] bg-amber-50/30"
+          />
+        </div>
+      </div>
+
       {/* Submit Button */}
       <div className="pt-2">
         <button
@@ -461,7 +632,7 @@ export const AdminOperations: React.FC = () => {
           className="px-8 py-3.5 bg-[#8C4A26] hover:bg-[#753A1B] text-white font-extrabold text-sm rounded-2xl shadow-xl hover:shadow-2xl transition-all cursor-pointer flex items-center gap-2"
         >
           <Check className="w-4 h-4" />
-          <span>{isSaving ? 'Đang lưu cài đặt...' : 'Lưu tất cả cài đặt vận hành & Phí km'}</span>
+          <span>{isSaving ? 'Đang lưu cài đặt...' : 'Lưu tất cả cài đặt vận hành & Webhook'}</span>
         </button>
       </div>
 

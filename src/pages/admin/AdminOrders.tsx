@@ -250,16 +250,18 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ initialStatusFilter = 
 
                     <td className="py-3 px-3 whitespace-nowrap">
                       <div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          order.payment_status === 'verified' || order.payment_status === 'paid'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {order.payment_status === 'verified' || order.payment_status === 'paid' ? 'Đã thu tiền' : 'Chưa thu'}
-                        </span>
+                        {order.is_prepaid || order.payment_status === 'paid' || order.payment_status === 'verified' ? (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 inline-block">
+                            ✓ Đã trả trước (0đ COD)
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 inline-block">
+                            Chưa thu ({order.payment_method === 'transfer' ? 'Chuyển khoản' : 'COD'})
+                          </span>
+                        )}
                       </div>
                       <span className="text-[10px] text-gray-400 mt-0.5 block">
-                        {order.payment_method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt'}
+                        {order.payment_method === 'transfer' || order.is_prepaid ? 'Chuyển khoản VietQR' : 'Tiền mặt khi giao'}
                       </span>
                     </td>
 
@@ -430,6 +432,33 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ initialStatusFilter = 
                 </div>
               )}
             </div>
+
+            {/* Shipper Payment Warning Banner */}
+            {selectedOrder.is_prepaid || selectedOrder.payment_status === 'paid' || selectedOrder.payment_status === 'verified' ? (
+              <div className="p-3.5 rounded-2xl bg-emerald-100 border-2 border-emerald-400 text-emerald-950 font-bold text-xs flex items-center gap-2.5 shadow-2xs">
+                <span className="text-xl">✅</span>
+                <div>
+                  <p className="uppercase tracking-wide font-black text-emerald-900">
+                    ĐƠN HÀNG ĐÃ THANH TOÁN TRƯỚC 100%
+                  </p>
+                  <p className="text-[11px] font-normal text-emerald-800 mt-0.5">
+                    Shipper giao bánh tới khách mà <strong>TUYỆT ĐỐI KHÔNG THU TIỀN MẶT</strong> (Thu hộ COD: 0đ).
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-2xl bg-amber-100/70 border border-amber-300 text-amber-950 font-bold text-xs flex items-center gap-2.5">
+                <span className="text-xl">💵</span>
+                <div>
+                  <p className="font-black text-amber-900">
+                    THU TIỀN MẶT KHI GIAO (COD): {selectedOrder.total_amount.toLocaleString('vi-VN')}đ
+                  </p>
+                  <p className="text-[11px] font-normal text-amber-800 mt-0.5">
+                    Khách chưa thanh toán trước. Shipper vui lòng thu tiền mặt đầy đủ khi giao bánh.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Items Breakdown */}
             <div className="space-y-3">

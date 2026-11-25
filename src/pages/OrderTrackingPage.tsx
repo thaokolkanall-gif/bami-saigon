@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle2, Clock, Phone, MessageCircle, AlertCircle, Copy, Check, ArrowRight, ShieldAlert, Navigation, ExternalLink } from 'lucide-react';
+import { CheckCircle2, Clock, Phone, MessageCircle, AlertCircle, Copy, Check, ArrowRight, ShieldAlert, Navigation, ExternalLink, CreditCard, Sparkles, X } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
+import confetti from 'canvas-confetti';
 
 interface OrderTrackingPageProps {
   trackingToken: string;
@@ -14,6 +15,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({ trackingTo
   const [isLoading, setIsLoading] = useState(true);
   const [isCopied, setIsCopied] = useState(false);
   const [error, setError] = useState('');
+  const [showPrepayModal, setShowPrepayModal] = useState(false);
 
   const fetchOrder = () => {
     fetch(`/api/orders/track/${trackingToken}`)
@@ -35,7 +37,28 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({ trackingTo
     fetchOrder();
     // Poll every 10 seconds for live status update
     const interval = setInterval(fetchOrder, 10000);
-    return () => clearInterval(interval);
+
+    // Also listen to Real-time SSE for instant status or auto-payment confirmation
+    const eventSource = new EventSource('/api/orders/events');
+    eventSource.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === 'payment_received' && data.tracking_token === trackingToken) {
+          fetchOrder();
+          setShowPrepayModal(false);
+          try {
+            confetti({ particleCount: 90, spread: 70, origin: { y: 0.6 } });
+          } catch (err) {}
+        } else if (data.type === 'order_status_updated') {
+          fetchOrder();
+        }
+      } catch (err) {}
+    };
+
+    return () => {
+      clearInterval(interval);
+      eventSource.close();
+    };
   }, [trackingToken]);
 
   const handleCopyLink = () => {
@@ -61,7 +84,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({ trackingTo
         <p className="text-sm text-gray-600">{error || 'Đường dẫn theo dõi không chính xác hoặc đã hết hạn.'}</p>
         <button
           onClick={onGoHome}
-          className="px-6 py-2.5 bg-[#8C4A26] text-white font-bold rounded-xl text-sm"
+          className="px-6 py-2.5 bg-[#8C4A26] text-white font-bold rounded-xl text-sm cursor-pointer"
         >
           Về trang chủ
         </button>
@@ -73,30 +96,38 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({ trackingTo
     { key: 'new', label: 'Chờ xác nhận', desc: 'Quán đã nhận đơn' },
     { key: 'confirmed', label: 'Đã xác nhận', desc: 'Chuẩn bị nướng bánh' },
     { key: 'preparing', label: 'Đang làm bánh', desc: 'Nóng giòn tại lò' },
-    { key: 'delivering', label: order.order_type === 'pickup' ? 'Sẵn sàng nhận' : 'Đang giao hàng', desc: order.order_type === 'pickup' ? 'Mời ghé quán nhận' : 'Shipper đang trên đường' },
-    { key: 'completed', label: 'Hoàn thành', desc: 'Chúc ngon miệng!' },
+    { key: 'delivering', label: order.order_type === 'pickup' ? 'Chờ bạn nhận' : 'Đang giao hàng', desc: order.order_type === 'pickup' ? 'Bánh đã sẵn sàng' : 'Shipper đang trên đường' },
+    { key: 'completed', label: 'Hoàn thành', desc: 'Chúc bạn ngon miệng!' },
   ];
 
   const getStepStatus = (stepKey: string) => {
-    if (order.status === 'cancelled') return 'cancelled';
     const statusOrder = ['new', 'confirmed', 'preparing', 'delivering', 'completed'];
-    const currentIndex = statusOrder.indexOf(order.status);
-    const stepIndex = statusOrder.indexOf(stepKey);
+    const currentIdx = statusOrder.indexOf(order.status);
+    const stepIdx = statusOrder.indexOf(stepKey);
 
-    if (stepIndex < currentIndex) return 'done';
-    if (stepIndex === currentIndex) return 'current';
+    if (order.status === 'cancelled') return 'cancelled';
+    if (stepIdx < currentIdx) return 'done';
+    if (stepIdx === currentIdx) return 'current';
     return 'pending';
   };
 
   const phone = settings?.phone || '0908 123 456';
   const zalo = settings?.zalo || '0908 123 456';
 
+  // Bank transfer info for Pre-payment
+  const bankName = settings?.bank_name || 'Techcombank';
+  const bankAccount = settings?.bank_account || '1903688899901';
+  const bankOwner = settings?.bank_owner || 'BAMI SAI GON';
+  const vietqrUrl = `https://img.vietqr.io/image/${bankName}-${bankAccount}-compact2.png?amount=${order.total_amount}&addInfo=BAMI%20${order.order_code}&accountName=${encodeURIComponent(bankOwner)}`;
+
+  const isPaid = order.payment_status === 'paid' || order.payment_status === 'verified';
+
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8">
       
-      {/* Header Banner */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-amber-200/80 shadow-md text-center space-y-3">
-        <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-xs">
+      {/* Success Hero Header */}
+      <div className="text-center space-y-3">
+        <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-sm animate-bounce">
           <CheckCircle2 className="w-9 h-9" />
         </div>
         <div className="inline-block px-3 py-1 rounded-full bg-[#FFF8E8] border border-[#F5BD42] text-xs font-black text-[#8C4A26] uppercase">
@@ -121,11 +152,55 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({ trackingTo
         </div>
       </div>
 
+      {/* 🌟 PREPAY / PAID BANNER (Key Feature) */}
+      {isPaid ? (
+        <div className="p-5 rounded-3xl bg-emerald-50 border-2 border-emerald-300 text-emerald-950 flex flex-col sm:flex-row items-center gap-4 shadow-sm">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md">
+            <CheckCircle2 className="w-7 h-7" />
+          </div>
+          <div className="flex-1 text-center sm:text-left">
+            <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-200/80 px-2.5 py-0.5 rounded-full inline-block mb-1">
+              ✓ Đã Thanh Toán Trước
+            </span>
+            <h4 className="font-bold text-base text-emerald-900">
+              Đơn hàng đã được thanh toán thành công ({order.total_amount.toLocaleString('vi-VN')}đ)
+            </h4>
+            <p className="text-xs text-emerald-700 mt-0.5">
+              Hệ thống đã tự động đối soát tiền chuyển khoản. Shipper sẽ giao bánh tới tận tay bạn mà <strong>không thu thêm tiền mặt</strong>!
+            </p>
+          </div>
+        </div>
+      ) : order.status !== 'cancelled' ? (
+        <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-amber-50 via-[#FFF8E8] to-orange-50 border-2 border-amber-300 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <span className="text-[10px] font-black uppercase text-[#8C4A26] bg-[#F5BD42]/40 px-2.5 py-0.5 rounded-full inline-block">
+                💳 Thanh toán linh hoạt
+              </span>
+              <h4 className="font-bold text-base text-[#4A2115]">
+                Bạn muốn thanh toán trước qua Ngân hàng?
+              </h4>
+              <p className="text-xs text-gray-600 leading-relaxed max-w-lg">
+                Quét mã VietQR chuyển khoản trước để shipper giao bánh tới cửa mà bạn không cần phải chuẩn bị tiền lẻ hoặc tiếp xúc tiền mặt.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowPrepayModal(true)}
+              className="px-5 py-3 rounded-2xl bg-[#8C4A26] hover:bg-[#753A1B] text-white font-extrabold text-xs shadow-md transition-all shrink-0 cursor-pointer flex items-center justify-center gap-2"
+            >
+              <CreditCard className="w-4 h-4 text-[#F5BD42]" />
+              <span>Quét mã VietQR ngay →</span>
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {/* Live Status Progress Bar */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-amber-200/80 shadow-sm space-y-6">
         <h3 className="font-bold text-base text-[#4A2115] border-b border-amber-100 pb-3 flex items-center justify-between">
           <span>Tiến độ xử lý đơn hàng</span>
-          <span className="text-xs font-normal text-gray-500">Tự động cập nhật mỗi 10s</span>
+          <span className="text-xs font-normal text-gray-500">Cập nhật tự động thời gian thực</span>
         </h3>
 
         {order.status === 'cancelled' ? (
@@ -232,17 +307,17 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({ trackingTo
           <div>
             <p className="text-gray-500">Phương thức thanh toán:</p>
             <p className="font-bold text-sm text-[#4A2115] mt-0.5">
-              {order.payment_method === 'transfer' ? 'Chuyển khoản VietQR' : 'Tiền mặt khi nhận'}
+              {order.payment_method === 'transfer' || order.is_prepaid ? 'Chuyển khoản VietQR' : 'Tiền mặt khi nhận'}
             </p>
           </div>
 
           <div>
             <p className="text-gray-500">Trạng thái thanh toán:</p>
             <p className="font-bold text-sm mt-0.5">
-              {order.payment_status === 'paid' || order.payment_status === 'verified' ? (
-                <span className="text-emerald-700">✓ Đã thanh toán / Đã đối soát</span>
+              {isPaid ? (
+                <span className="text-emerald-700">✓ Đã thanh toán trước (0đ COD)</span>
               ) : (
-                <span className="text-amber-800">Chưa thanh toán (Chờ quán đối soát)</span>
+                <span className="text-amber-800">Chưa thanh toán (Thanh toán khi nhận)</span>
               )}
             </p>
           </div>
@@ -296,31 +371,80 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({ trackingTo
       <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
         <a
           href={`tel:${phone.replace(/\s+/g, '')}`}
-          className="w-full sm:w-auto px-6 py-3.5 bg-[#8C4A26] hover:bg-[#753A1B] text-white font-bold rounded-xl text-sm shadow-md flex items-center justify-center gap-2"
+          className="w-full sm:w-auto px-6 py-3.5 bg-[#8C4A26] hover:bg-[#753A1B] text-white font-bold rounded-xl text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer"
         >
           <Phone className="w-4 h-4" />
-          <span>Gọi hotline quán: {phone}</span>
+          <span>Gọi Hotline Quán ({phone})</span>
         </a>
 
-        {zalo && (
-          <a
-            href={`https://zalo.me/${zalo.replace(/\s+/g, '')}`}
-            target="_blank"
-            rel="noreferrer"
-            className="w-full sm:w-auto px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm shadow-md flex items-center justify-center gap-2"
-          >
-            <MessageCircle className="w-4 h-4" />
-            <span>Mở Zalo quán</span>
-          </a>
-        )}
+        <a
+          href={`https://zalo.me/${zalo.replace(/\s+/g, '')}`}
+          target="_blank"
+          rel="noreferrer"
+          className="w-full sm:w-auto px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer"
+        >
+          <MessageCircle className="w-4 h-4" />
+          <span>Nhắn tin Zalo với Quán</span>
+        </a>
 
         <button
           onClick={onGoMenu}
-          className="w-full sm:w-auto px-6 py-3.5 bg-white hover:bg-amber-50 text-[#4A2115] border border-[#F5BD42] font-bold rounded-xl text-sm shadow-xs"
+          className="w-full sm:w-auto px-6 py-3.5 bg-white border-2 border-[#8C4A26] text-[#8C4A26] hover:bg-amber-50 font-bold rounded-xl text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer"
         >
-          Đặt thêm món khác
+          <span>Đặt thêm món khác</span>
+          <ArrowRight className="w-4 h-4" />
         </button>
       </div>
+
+      {/* 💳 PRE-PAY VIETQR MODAL */}
+      {showPrepayModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 space-y-5 shadow-2xl border border-amber-200 relative animate-in zoom-in-95 duration-150">
+            <button
+              onClick={() => setShowPrepayModal(false)}
+              className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="text-center space-y-1">
+              <span className="text-2xl">⚡</span>
+              <h3 className="font-display font-black text-xl text-[#4A2115]">
+                Quét Mã VietQR Thanh Toán Trước
+              </h3>
+              <p className="text-xs text-gray-500">
+                Đơn #{order.order_code} • Số tiền: <strong className="text-[#8C4A26]">{order.total_amount.toLocaleString('vi-VN')}đ</strong>
+              </p>
+            </div>
+
+            <div className="flex flex-col items-center justify-center p-4 bg-amber-50/50 rounded-2xl border border-amber-200 space-y-3">
+              <img
+                src={vietqrUrl}
+                alt={`VietQR đơn hàng ${order.order_code}`}
+                className="w-48 h-48 rounded-xl object-contain border border-gray-200 shadow-sm bg-white p-1"
+              />
+
+              <div className="text-xs space-y-1 text-center text-gray-700">
+                <p><strong>Ngân hàng:</strong> {bankName}</p>
+                <p><strong>Số tài khoản:</strong> <span className="font-mono font-bold text-[#8C4A26]">{bankAccount}</span></p>
+                <p><strong>Chủ tài khoản:</strong> {bankOwner}</p>
+                <p><strong>Nội dung CK:</strong> <span className="font-mono font-bold bg-amber-100 px-2 py-0.5 rounded text-[#4A2115]">BAMI {order.order_code}</span></p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-100/70 border border-amber-300 rounded-xl text-[11px] text-amber-900 leading-relaxed text-center">
+              💡 <strong>Hệ thống tự động:</strong> Sau khi bạn chuyển khoản thành công, màn hình này sẽ tự động cập nhật sang <strong>"Đã thanh toán trước"</strong> trong vài giây mà không cần bấm thêm gì!
+            </div>
+
+            <button
+              onClick={() => setShowPrepayModal(false)}
+              className="w-full py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs cursor-pointer"
+            >
+              Đóng cửa sổ này
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );

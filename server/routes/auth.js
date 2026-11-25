@@ -97,4 +97,40 @@ router.put('/staff/:id/status', authenticateToken, requireOwner, (req, res) => {
   res.json({ success: true });
 });
 
+// Emergency Admin Password Recovery using Master Secret Key
+router.post('/admin-recovery', rateLimiter({ windowMs: 60000, max: 5 }), (req, res) => {
+  const { recovery_key, new_password } = req.body;
+
+  if (!recovery_key || !new_password || new_password.length < 6) {
+    return res.status(400).json({ error: 'Vui lòng cung cấp Khóa khôi phục khẩn cấp và mật khẩu mới (tối thiểu 6 ký tự)' });
+  }
+
+  // Check against env or database settings
+  const recSetting = db.prepare("SELECT value FROM settings WHERE key = 'admin_recovery_key'").get();
+  const validKey = process.env.ADMIN_RECOVERY_KEY || recSetting?.value || 'BAMI_ADMIN_MASTER_KEY_2026';
+
+  if (recovery_key.trim() !== validKey.trim()) {
+    return res.status(403).json({ error: 'Khóa khôi phục khẩn cấp không chính xác!' });
+  }
+
+  const newHash = bcrypt.hashSync(new_password, 10);
+  
+  // Ensure admin user exists or update password
+  const adminUser = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
+  if (adminUser) {
+    db.prepare("UPDATE users SET password_hash = ?, is_active = 1 WHERE username = 'admin'").run(newHash);
+  } else {
+    db.prepare("INSERT INTO users (username, password_hash, full_name, role, is_active) VALUES ('admin', ?, 'Chủ Quán Bami', 'owner', 1)").run(newHash);
+  }
+
+  // Audit log
+  db.prepare('INSERT INTO audit_logs (username, action, details) VALUES (?, ?, ?)')
+    .run('Hệ thống', 'Khôi phục khẩn cấp mật khẩu Admin', 'Đặt lại mật khẩu Admin thành công qua Master Recovery Key');
+
+  res.json({
+    success: true,
+    message: 'Khôi phục tài khoản Admin thành công! Bạn có thể dùng mật khẩu mới để đăng nhập ngay bây giờ.'
+  });
+});
+
 module.exports = router;

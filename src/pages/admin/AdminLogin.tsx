@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Lock, User, ShieldAlert, ArrowRight, Sparkles } from 'lucide-react';
+import { Lock, User, ShieldAlert, ArrowRight, Sparkles, KeyRound } from 'lucide-react';
+import { AdminRecovery } from './AdminRecovery';
 
 interface AdminLoginProps {
   onLoginSuccess: (user: any, token: string) => void;
@@ -11,6 +12,11 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
+
+  if (showRecovery) {
+    return <AdminRecovery onBackToLogin={() => setShowRecovery(false)} />;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,9 +94,18 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[#4A2115] mb-1">
-                Mật khẩu
-              </label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-bold text-[#4A2115]">
+                  Mật khẩu
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowRecovery(true)}
+                  className="text-xs text-[#8C4A26] hover:underline font-semibold cursor-pointer"
+                >
+                  Quên mật khẩu?
+                </button>
+              </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input

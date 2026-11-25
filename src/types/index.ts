@@ -161,10 +161,28 @@ export interface Order {
   delivery_fee: number;
   total_amount: number;
   internal_notes: string | null;
+  customer_id?: number | null;
+  is_prepaid?: number;
+  paid_at?: string | null;
+  transaction_ref?: string | null;
   created_at: string;
   updated_at: string;
   items?: OrderItem[];
   history?: OrderHistoryItem[];
+}
+
+export interface Customer {
+  id: number;
+  phone: string;
+  email: string | null;
+  full_name: string;
+  default_address?: string | null;
+  default_address_note?: string | null;
+  is_active: number;
+  total_orders?: number;
+  total_spent?: number;
+  last_order_date?: string | null;
+  created_at: string;
 }
 
 export interface AiProposal {
