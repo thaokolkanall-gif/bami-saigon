@@ -57,6 +57,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // Pre-payment flow state: after order created with transfer, show QR modal on this page
+  const [pendingPaymentOrder, setPendingPaymentOrder] = useState<{
+    order_code: string;
+    tracking_token: string;
+    total_amount: number;
+  } | null>(null);
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+
   // Shipping fee logic: 0 for pickup, calculated by distance for delivery
   const actualDeliveryFee = orderType === 'delivery' ? deliveryFee : 0;
   const finalTotal = Math.max(0, subtotal - discountAmount + actualDeliveryFee);
@@ -152,13 +160,23 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
         setErrorMessage(data.error || 'Có lỗi xảy ra khi tạo đơn hàng');
         setIsSubmitting(false);
       } else {
-        // Trigger celebratory confetti
-        try {
-          confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
-        } catch (e) {}
-
-        clearCart();
-        onOrderSuccess(data.tracking_token);
+        // If prepaid (transfer): show QR modal on this page, wait for payment confirmation
+        if (data.is_pending_payment) {
+          setPendingPaymentOrder({
+            order_code: data.order_code,
+            tracking_token: data.tracking_token,
+            total_amount: data.total_amount,
+          });
+          setIsSubmitting(false);
+          // Don't clearCart or navigate yet — wait for payment
+        } else {
+          // COD: immediately go to tracking
+          try {
+            confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+          } catch (e) {}
+          clearCart();
+          onOrderSuccess(data.tracking_token);
+        }
       }
     } catch (err) {
       setErrorMessage('Không thể kết nối tới máy chủ. Vui lòng kiểm tra đường truyền mạng.');
@@ -174,6 +192,52 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
 
   // Google Maps store directions URL
   const googleMapsStoreUrl = settings?.google_map_url || `https://www.google.com/maps/dir/?api=1&destination=${storeLat},${storeLng}`;
+
+  // SSE listener: When pendingPaymentOrder exists, listen for payment_received
+  useEffect(() => {
+    if (!pendingPaymentOrder) return;
+
+    const eventSource = new EventSource('/api/orders/events');
+    eventSource.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === 'payment_received' && data.tracking_token === pendingPaymentOrder.tracking_token) {
+          setPaymentConfirmed(true);
+          try {
+            confetti({ particleCount: 100, spread: 80, origin: { y: 0.5 } });
+          } catch (err) {}
+          // After 2 seconds of celebration, navigate to tracking
+          setTimeout(() => {
+            clearCart();
+            onOrderSuccess(pendingPaymentOrder.tracking_token);
+          }, 2000);
+        }
+      } catch (err) {}
+    };
+
+    // Also poll every 8 seconds as fallback
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/payments/prepay-info/${pendingPaymentOrder.tracking_token}`);
+        const info = await res.json();
+        if (info.payment_status === 'paid' || info.payment_status === 'verified') {
+          setPaymentConfirmed(true);
+          try {
+            confetti({ particleCount: 100, spread: 80, origin: { y: 0.5 } });
+          } catch (err) {}
+          setTimeout(() => {
+            clearCart();
+            onOrderSuccess(pendingPaymentOrder.tracking_token);
+          }, 2000);
+        }
+      } catch (err) {}
+    }, 8000);
+
+    return () => {
+      eventSource.close();
+      clearInterval(interval);
+    };
+  }, [pendingPaymentOrder]);
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
@@ -601,6 +665,92 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
         </div>
 
       </form>
+
+      {/* 💳 PREPAY WAITING MODAL — Shown after order is created with transfer method */}
+      {pendingPaymentOrder && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 space-y-5 shadow-2xl border border-amber-200 relative animate-in zoom-in-95 duration-200">
+            
+            {paymentConfirmed ? (
+              /* ✅ Payment Confirmed - Celebration */
+              <div className="text-center space-y-4 py-4">
+                <div className="w-20 h-20 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-lg animate-bounce">
+                  <CheckCircle2 className="w-10 h-10" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="font-display font-black text-2xl text-emerald-700">
+                    Thanh Toán Thành Công! 🎉
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    Đơn hàng <strong className="text-[#8C4A26]">#{pendingPaymentOrder.order_code}</strong> đã được xác nhận.
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Đang chuyển đến trang theo dõi đơn hàng...
+                  </p>
+                </div>
+                <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              </div>
+            ) : (
+              /* ⏳ Waiting for Payment */
+              <>
+                <div className="text-center space-y-1">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-2">
+                    <CreditCard className="w-7 h-7" />
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#8C4A26] bg-amber-100 px-3 py-1 rounded-full inline-block">
+                    ⏳ Chờ thanh toán
+                  </span>
+                  <h3 className="font-display font-black text-xl text-[#4A2115]">
+                    Quét Mã VietQR Để Xác Nhận Đơn
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Đơn #{pendingPaymentOrder.order_code} • Số tiền: <strong className="text-[#8C4A26]">{pendingPaymentOrder.total_amount.toLocaleString('vi-VN')}đ</strong>
+                  </p>
+                </div>
+
+                <div className="flex flex-col items-center justify-center p-4 bg-amber-50/50 rounded-2xl border border-amber-200 space-y-3">
+                  <img
+                    src={`https://img.vietqr.io/image/${bankName}-${bankAccount}-compact2.png?amount=${pendingPaymentOrder.total_amount}&addInfo=BAMI%20${pendingPaymentOrder.order_code}&accountName=${encodeURIComponent(bankOwner)}`}
+                    alt={`VietQR đơn hàng ${pendingPaymentOrder.order_code}`}
+                    className="w-52 h-52 rounded-xl object-contain border border-gray-200 shadow-sm bg-white p-1"
+                  />
+
+                  <div className="text-xs space-y-1 text-center text-gray-700">
+                    <p><strong>Ngân hàng:</strong> {bankName}</p>
+                    <p><strong>Số tài khoản:</strong> <span className="font-mono font-bold text-[#8C4A26]">{bankAccount}</span></p>
+                    <p><strong>Chủ tài khoản:</strong> {bankOwner}</p>
+                    <p><strong>Nội dung CK:</strong> <span className="font-mono font-bold bg-amber-100 px-2 py-0.5 rounded text-[#4A2115]">BAMI {pendingPaymentOrder.order_code}</span></p>
+                  </div>
+                </div>
+
+                {/* Pulsing waiting indicator */}
+                <div className="flex items-center justify-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+                  <p className="text-xs text-blue-800 font-medium">
+                    Đang chờ xác nhận thanh toán từ ngân hàng... Trang sẽ tự động cập nhật.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-amber-100/70 border border-amber-300 rounded-xl text-[11px] text-amber-900 leading-relaxed text-center">
+                  💡 <strong>Lưu ý:</strong> Đơn hàng sẽ <strong>chỉ được tiếp nhận sau khi thanh toán thành công</strong>. Hãy quét mã QR bằng ứng dụng ngân hàng để hoàn tất.
+                </div>
+
+                <button
+                  onClick={() => {
+                    // Allow user to cancel and go back (order stays pending_payment in DB)
+                    setPendingPaymentOrder(null);
+                    setPaymentConfirmed(false);
+                  }}
+                  className="w-full py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs cursor-pointer"
+                >
+                  ← Quay lại chỉnh sửa đơn hàng
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

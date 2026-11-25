@@ -247,13 +247,16 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
 
   // Database Transaction to save order & line items
   const createOrderTransaction = db.transaction(() => {
+    // If prepaid (transfer), set initial status to 'pending_payment' — order won't be "active" until payment confirmed
+    const initialStatus = (payment_method === 'transfer' || is_prepaid) ? 'pending_payment' : 'new';
+
     const orderResult = db.prepare(`
       INSERT INTO orders (
         order_code, tracking_token, customer_name, customer_phone, order_type,
         address, address_note, distance_km, customer_lat, customer_lng, pickup_time, order_note,
         payment_method, payment_status, status, subtotal, discount_amount,
         delivery_fee, total_amount, idempotency_key, customer_id, is_prepaid
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid', 'new', ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid', ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       orderCode,
       trackingToken,
@@ -268,6 +271,7 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
       pickup_time || null,
       order_note || null,
       payment_method === 'transfer' ? 'transfer' : 'cod',
+      initialStatus,
       subtotal,
       discountAmount,
       deliveryFee,
@@ -301,43 +305,48 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
     // Insert order history
     db.prepare(`
       INSERT INTO order_history (order_id, from_status, to_status, note, updated_by)
-      VALUES (?, NULL, 'new', 'Khách hàng tạo đơn trực tuyến', 'Khách hàng')
-    `).run(orderId);
+      VALUES (?, NULL, ?, ?, 'Khách hàng')
+    `).run(orderId, initialStatus, initialStatus === 'pending_payment' ? 'Khách tạo đơn - Chờ thanh toán chuyển khoản trước' : 'Khách hàng tạo đơn trực tuyến');
 
     // Update promo usage
     if (validPromoId) {
       db.prepare('UPDATE promotions SET used_count = used_count + 1 WHERE id = ?').run(validPromoId);
     }
 
-    // Create admin notification
-    db.prepare(`
-      INSERT INTO notifications (title, message, type, order_id)
-      VALUES (?, ?, 'order', ?)
-    `).run(
-      `Đơn hàng mới #${orderCode}`,
-      `Khách ${customer_name} vừa đặt đơn ${totalAmount.toLocaleString('vi-VN')}đ`,
-      orderId
-    );
+    // Create admin notification (only notify immediately for COD orders; prepay orders notify after payment)
+    if (initialStatus === 'new') {
+      db.prepare(`
+        INSERT INTO notifications (title, message, type, order_id)
+        VALUES (?, ?, 'order', ?)
+      `).run(
+        `Đơn hàng mới #${orderCode}`,
+        `Khách ${customer_name} vừa đặt đơn ${totalAmount.toLocaleString('vi-VN')}đ`,
+        orderId
+      );
+    }
 
-    return { orderId, orderCode, trackingToken, totalAmount };
+    return { orderId, orderCode, trackingToken, totalAmount, initialStatus };
   });
 
   const createdOrder = createOrderTransaction();
 
-  // Broadcast to admin in real-time
-  broadcastOrderEvent({
-    type: 'new_order',
-    order_id: createdOrder.orderId,
-    order_code: createdOrder.orderCode,
-    total_amount: createdOrder.totalAmount,
-    customer_name: customer_name.trim()
-  });
+  // Broadcast to admin in real-time (only for COD orders; prepay orders broadcast after payment confirmed)
+  if (createdOrder.initialStatus === 'new') {
+    broadcastOrderEvent({
+      type: 'new_order',
+      order_id: createdOrder.orderId,
+      order_code: createdOrder.orderCode,
+      total_amount: createdOrder.totalAmount,
+      customer_name: customer_name.trim()
+    });
+  }
 
   res.json({
     success: true,
     order_code: createdOrder.orderCode,
     tracking_token: createdOrder.trackingToken,
-    total_amount: createdOrder.totalAmount
+    total_amount: createdOrder.totalAmount,
+    is_pending_payment: createdOrder.initialStatus === 'pending_payment'
   });
 });
 
@@ -468,7 +477,7 @@ router.put('/admin/:id/status', authenticateToken, (req, res) => {
   const { id } = req.params;
   const { status, note } = req.body;
 
-  const validStatuses = ['new', 'confirmed', 'preparing', 'delivering', 'completed'];
+  const validStatuses = ['pending_payment', 'new', 'confirmed', 'preparing', 'delivering', 'completed'];
   if (!validStatuses.includes(status)) {
     return res.status(400).json({ error: 'Trạng thái chuyển tiếp không hợp lệ' });
   }

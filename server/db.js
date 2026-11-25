@@ -121,7 +121,7 @@ function initDatabase() {
       order_note TEXT,
       payment_method TEXT CHECK(payment_method IN ('cod', 'transfer')) NOT NULL DEFAULT 'cod',
       payment_status TEXT CHECK(payment_status IN ('unpaid', 'verified', 'paid')) NOT NULL DEFAULT 'unpaid',
-      status TEXT CHECK(status IN ('new', 'confirmed', 'preparing', 'delivering', 'completed', 'cancelled')) NOT NULL DEFAULT 'new',
+      status TEXT CHECK(status IN ('pending_payment', 'new', 'confirmed', 'preparing', 'delivering', 'completed', 'cancelled')) NOT NULL DEFAULT 'new',
       cancel_reason TEXT,
       subtotal INTEGER NOT NULL,
       discount_amount INTEGER DEFAULT 0,

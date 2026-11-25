@@ -106,6 +106,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({ trackingTo
     const stepIdx = statusOrder.indexOf(stepKey);
 
     if (order.status === 'cancelled') return 'cancelled';
+    if (order.status === 'pending_payment') return 'pending'; // All steps pending if waiting for payment
     if (stepIdx < currentIdx) return 'done';
     if (stepIdx === currentIdx) return 'current';
     return 'pending';
@@ -127,18 +128,37 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({ trackingTo
       
       {/* Success Hero Header */}
       <div className="text-center space-y-3">
-        <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-sm animate-bounce">
-          <CheckCircle2 className="w-9 h-9" />
-        </div>
-        <div className="inline-block px-3 py-1 rounded-full bg-[#FFF8E8] border border-[#F5BD42] text-xs font-black text-[#8C4A26] uppercase">
-          Đặt đơn thành công
-        </div>
-        <h1 className="font-display font-black text-2xl sm:text-3xl text-[#4A2115]">
-          Mã đơn hàng: <span className="text-[#8C4A26]">#{order.order_code}</span>
-        </h1>
-        <p className="text-xs sm:text-sm text-gray-600 max-w-md mx-auto">
-          Cảm ơn quý khách <strong>{order.customer_name}</strong> đã đặt bánh tại Bami Sài Gòn.
-        </p>
+        {order.status === 'pending_payment' ? (
+          <>
+            <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto shadow-sm">
+              <Clock className="w-9 h-9 animate-pulse" />
+            </div>
+            <div className="inline-block px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-xs font-black text-amber-800 uppercase">
+              ⏳ Chờ thanh toán
+            </div>
+            <h1 className="font-display font-black text-2xl sm:text-3xl text-[#4A2115]">
+              Mã đơn hàng: <span className="text-[#8C4A26]">#{order.order_code}</span>
+            </h1>
+            <p className="text-xs sm:text-sm text-gray-600 max-w-md mx-auto">
+              Đơn hàng đang chờ bạn thanh toán qua chuyển khoản. Sau khi thanh toán, quán sẽ bắt đầu làm bánh.
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-sm animate-bounce">
+              <CheckCircle2 className="w-9 h-9" />
+            </div>
+            <div className="inline-block px-3 py-1 rounded-full bg-[#FFF8E8] border border-[#F5BD42] text-xs font-black text-[#8C4A26] uppercase">
+              Đặt đơn thành công
+            </div>
+            <h1 className="font-display font-black text-2xl sm:text-3xl text-[#4A2115]">
+              Mã đơn hàng: <span className="text-[#8C4A26]">#{order.order_code}</span>
+            </h1>
+            <p className="text-xs sm:text-sm text-gray-600 max-w-md mx-auto">
+              Cảm ơn quý khách <strong>{order.customer_name}</strong> đã đặt bánh tại Bami Sài Gòn.
+            </p>
+          </>
+        )}
 
         {/* Share tracking link button */}
         <div className="pt-2 flex justify-center">
@@ -153,7 +173,40 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({ trackingTo
       </div>
 
       {/* 🌟 PREPAY / PAID BANNER (Key Feature) */}
-      {isPaid ? (
+      {order.status === 'pending_payment' ? (
+        /* ⚠️ Payment Required Banner */
+        <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-rose-50 via-orange-50 to-amber-50 border-2 border-orange-300 shadow-md space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <span className="text-[10px] font-black uppercase text-rose-700 bg-rose-100 px-2.5 py-0.5 rounded-full inline-block animate-pulse">
+                ⚠️ Chưa thanh toán — Đơn hàng chưa được tiếp nhận
+              </span>
+              <h4 className="font-bold text-base text-[#4A2115]">
+                Vui lòng thanh toán để xác nhận đơn hàng
+              </h4>
+              <p className="text-xs text-gray-600 leading-relaxed max-w-lg">
+                Quán sẽ chỉ bắt đầu làm bánh <strong>sau khi nhận được tiền chuyển khoản</strong>. Hãy quét mã VietQR bên dưới để hoàn tất thanh toán.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowPrepayModal(true)}
+              className="px-5 py-3 rounded-2xl bg-[#8C4A26] hover:bg-[#753A1B] text-white font-extrabold text-xs shadow-md transition-all shrink-0 cursor-pointer flex items-center justify-center gap-2 animate-pulse"
+            >
+              <CreditCard className="w-4 h-4 text-[#F5BD42]" />
+              <span>Quét mã VietQR thanh toán ngay →</span>
+            </button>
+          </div>
+
+          {/* Pulsing waiting indicator */}
+          <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+            <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+            <p className="text-xs text-blue-800 font-medium">
+              Đang chờ xác nhận thanh toán từ ngân hàng... Trang sẽ tự động cập nhật khi nhận được tiền.
+            </p>
+          </div>
+        </div>
+      ) : isPaid ? (
         <div className="p-5 rounded-3xl bg-emerald-50 border-2 border-emerald-300 text-emerald-950 flex flex-col sm:flex-row items-center gap-4 shadow-sm">
           <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md">
             <CheckCircle2 className="w-7 h-7" />

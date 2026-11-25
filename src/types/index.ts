@@ -154,7 +154,7 @@ export interface Order {
   order_note: string | null;
   payment_method: 'cod' | 'transfer';
   payment_status: 'unpaid' | 'verified' | 'paid';
-  status: 'new' | 'confirmed' | 'preparing' | 'delivering' | 'completed' | 'cancelled';
+  status: 'pending_payment' | 'new' | 'confirmed' | 'preparing' | 'delivering' | 'completed' | 'cancelled';
   cancel_reason: string | null;
   subtotal: number;
   discount_amount: number;

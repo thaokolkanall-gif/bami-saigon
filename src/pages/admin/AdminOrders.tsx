@@ -170,6 +170,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ initialStatusFilter = 
           className="text-xs py-2 px-3 rounded-xl border border-amber-200 bg-white font-semibold text-[#4A2115]"
         >
           <option value="all">Tất cả trạng thái</option>
+          <option value="pending_payment">⏳ Chờ thanh toán (CK)</option>
           <option value="new">🔴 Đơn mới (Cần duyệt)</option>
           <option value="confirmed">🔵 Đã xác nhận</option>
           <option value="preparing">🟡 Đang làm bánh</option>
@@ -215,7 +216,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ initialStatusFilter = 
                   <tr 
                     key={order.id} 
                     className={`hover:bg-amber-50/50 transition-colors cursor-pointer ${
-                      order.status === 'new' ? 'bg-rose-50/40' : ''
+                      order.status === 'new' ? 'bg-rose-50/40' : order.status === 'pending_payment' ? 'bg-orange-50/40' : ''
                     }`}
                     onClick={() => setSelectedOrder(order)}
                   >
@@ -223,6 +224,9 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ initialStatusFilter = 
                       #{order.order_code}
                       {order.status === 'new' && (
                         <span className="block text-[9px] text-rose-600 font-black animate-pulse">MỚI</span>
+                      )}
+                      {order.status === 'pending_payment' && (
+                        <span className="block text-[9px] text-orange-600 font-black animate-pulse">CHỜ CK</span>
                       )}
                     </td>
 
@@ -267,6 +271,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ initialStatusFilter = 
 
                     <td className="py-3 px-3 whitespace-nowrap">
                       <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${
+                        order.status === 'pending_payment' ? 'bg-orange-100 text-orange-700' :
                         order.status === 'new' ? 'bg-rose-100 text-rose-700' :
                         order.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
                         order.status === 'preparing' ? 'bg-amber-100 text-amber-800' :
@@ -274,7 +279,8 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ initialStatusFilter = 
                         order.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
                         'bg-gray-100 text-gray-600'
                       }`}>
-                        {order.status === 'new' ? 'Chờ xác nhận' :
+                        {order.status === 'pending_payment' ? '⏳ Chờ chuyển khoản' :
+                         order.status === 'new' ? 'Chờ xác nhận' :
                          order.status === 'confirmed' ? 'Đã xác nhận' :
                          order.status === 'preparing' ? 'Đang làm bánh' :
                          order.status === 'delivering' ? 'Đang giao / Chờ nhận' :

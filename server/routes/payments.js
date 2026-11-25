@@ -98,15 +98,17 @@ router.post('/webhook', (req, res) => {
       }
 
       // Update Order to PAID
+      const newOrderStatus = order.status === 'pending_payment' ? 'new' : order.status;
       db.prepare(`
         UPDATE orders 
         SET payment_status = 'paid', 
             payment_method = 'transfer', 
             is_prepaid = 1, 
+            status = ?,
             paid_at = CURRENT_TIMESTAMP, 
             transaction_ref = ?
         WHERE id = ?
-      `).run(tx.reference || 'WEBHOOK_TRANSFER', order.id);
+      `).run(newOrderStatus, tx.reference || 'WEBHOOK_TRANSFER', order.id);
 
       // Record Order History
       db.prepare(`
@@ -115,17 +117,20 @@ router.post('/webhook', (req, res) => {
       `).run(
         order.id,
         order.status,
-        order.status,
-        `Tự động xác nhận thanh toán chuyển khoản: ${tx.amount.toLocaleString('vi-VN')}đ (Mã GD: ${tx.reference || 'N/A'})`
+        newOrderStatus,
+        `Tự động xác nhận thanh toán chuyển khoản: ${tx.amount.toLocaleString('vi-VN')}đ (Mã GD: ${tx.reference || 'N/A'})${order.status === 'pending_payment' ? ' — Đơn hàng chính thức được tiếp nhận' : ''}`
       );
 
-      // Create Admin Notification
+      // Create Admin Notification (now the order enters the system)
       db.prepare(`
         INSERT INTO notifications (title, message, type, order_id)
-        VALUES (?, ?, 'payment', ?)
+        VALUES (?, ?, ?, ?)
       `).run(
-        `Đã nhận thanh toán đơn #${orderCode}`,
-        `Ngân hàng báo có +${tx.amount.toLocaleString('vi-VN')}đ cho đơn #${orderCode}. Khách đã thanh toán trước 100%!`,
+        order.status === 'pending_payment' ? `Đơn mới #${orderCode} (Đã thanh toán trước)` : `Đã nhận thanh toán đơn #${orderCode}`,
+        order.status === 'pending_payment' 
+          ? `Khách ${order.customer_name} đã thanh toán trước ${tx.amount.toLocaleString('vi-VN')}đ cho đơn #${orderCode}. Đơn hàng đã được xác nhận tự động!`
+          : `Ngân hàng báo có +${tx.amount.toLocaleString('vi-VN')}đ cho đơn #${orderCode}. Khách đã thanh toán trước 100%!`,
+        order.status === 'pending_payment' ? 'order' : 'payment',
         order.id
       );
 
@@ -137,8 +142,20 @@ router.post('/webhook', (req, res) => {
           order_code: order.order_code,
           tracking_token: order.tracking_token,
           amount: tx.amount,
-          is_prepaid: 1
+          is_prepaid: 1,
+          new_status: newOrderStatus
         });
+
+        // Also broadcast new_order if the order just transitioned from pending_payment to new
+        if (order.status === 'pending_payment') {
+          ordersRouter.broadcastOrderEvent({
+            type: 'new_order',
+            order_id: order.id,
+            order_code: order.order_code,
+            total_amount: order.total_amount,
+            customer_name: order.customer_name
+          });
+        }
       }
 
       processedOrders.push({ order_code: orderCode, status: 'paid', amount: tx.amount });
@@ -169,16 +186,18 @@ router.post('/simulate', authenticateToken, requireOwner, (req, res) => {
 
   const payAmount = amount || order.total_amount;
   const refCode = `SIM_${Date.now()}`;
+  const newOrderStatus = order.status === 'pending_payment' ? 'new' : order.status;
 
   db.prepare(`
     UPDATE orders 
     SET payment_status = 'paid', 
         payment_method = 'transfer', 
         is_prepaid = 1, 
+        status = ?,
         paid_at = CURRENT_TIMESTAMP, 
         transaction_ref = ?
     WHERE id = ?
-  `).run(refCode, order.id);
+  `).run(newOrderStatus, refCode, order.id);
 
   db.prepare(`
     INSERT INTO order_history (order_id, from_status, to_status, note, updated_by)
@@ -186,7 +205,7 @@ router.post('/simulate', authenticateToken, requireOwner, (req, res) => {
   `).run(
     order.id,
     order.status,
-    order.status,
+    newOrderStatus,
     `Thử nghiệm xác nhận thanh toán chuyển khoản: ${payAmount.toLocaleString('vi-VN')}đ`
   );
 
@@ -198,8 +217,19 @@ router.post('/simulate', authenticateToken, requireOwner, (req, res) => {
       order_code: order.order_code,
       tracking_token: order.tracking_token,
       amount: payAmount,
-      is_prepaid: 1
+      is_prepaid: 1,
+      new_status: newOrderStatus
     });
+
+    if (order.status === 'pending_payment') {
+      ordersRouter.broadcastOrderEvent({
+        type: 'new_order',
+        order_id: order.id,
+        order_code: order.order_code,
+        total_amount: order.total_amount,
+        customer_name: order.customer_name
+      });
+    }
   }
 
   res.json({
