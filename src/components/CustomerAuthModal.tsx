@@ -139,8 +139,8 @@ export const CustomerAuthModal: React.FC = () => {
             {authModalTab === 'forgot' && 'Khôi Phục Mật Khẩu'}
           </h3>
           <p className="text-xs text-gray-500 mt-1">
-            {authModalTab === 'login' && 'Lưu thông tin giao hàng & xem lại lịch sử đơn bánh'}
-            {authModalTab === 'register' && 'Chỉ mất 30 giây để trở thành thành viên Bami Sài Gòn'}
+            {authModalTab === 'login' && 'Đăng nhập để thêm món vào giỏ hàng và đặt hàng'}
+            {authModalTab === 'register' && 'Tạo tài khoản trong 30 giây để thêm món và mua hàng'}
             {authModalTab === 'forgot' && 'Lấy lại mật khẩu dễ dàng qua SĐT hoặc liên hệ quán'}
           </p>
         </div>

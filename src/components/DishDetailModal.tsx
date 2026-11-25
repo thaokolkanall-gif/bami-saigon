@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, Plus, Minus, Check, AlertCircle } from 'lucide-react';
+import { X, Plus, Minus, Check, AlertCircle, LogIn, Lock } from 'lucide-react';
 import { Product, Topping } from '../types';
 import { useCart } from '../context/CartContext';
+import { useCustomer } from '../context/CustomerContext';
 
 interface DishDetailModalProps {
   product: Product | null;
@@ -11,6 +12,7 @@ interface DishDetailModalProps {
 
 export const DishDetailModal: React.FC<DishDetailModalProps> = ({ product, toppings, onClose }) => {
   const { addToCart } = useCart();
+  const { customer, openAuthModal } = useCustomer();
   const [quantity, setQuantity] = useState(1);
   const [selectedToppings, setSelectedToppings] = useState<Topping[]>([]);
   const [note, setNote] = useState('');
@@ -33,6 +35,10 @@ export const DishDetailModal: React.FC<DishDetailModalProps> = ({ product, toppi
   const totalPrice = unitPrice * quantity;
 
   const handleAddToCart = () => {
+    if (!customer) {
+      openAuthModal('register');
+      return;
+    }
     addToCart(product, quantity, selectedToppings, note);
     onClose();
   };
@@ -186,14 +192,25 @@ export const DishDetailModal: React.FC<DishDetailModalProps> = ({ product, toppi
               </div>
 
               {/* Add Button */}
-              <button
-                type="button"
-                onClick={handleAddToCart}
-                className="flex-1 py-3.5 px-4 bg-[#8C4A26] hover:bg-[#753A1B] text-white rounded-xl font-black text-base shadow-lg hover:shadow-xl transition-all flex items-center justify-between cursor-pointer"
-              >
-                <span>Thêm vào giỏ</span>
-                <span>{totalPrice.toLocaleString('vi-VN')}đ</span>
-              </button>
+              {customer ? (
+                <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  className="flex-1 py-3.5 px-4 bg-[#8C4A26] hover:bg-[#753A1B] text-white rounded-xl font-black text-base shadow-lg hover:shadow-xl transition-all flex items-center justify-between cursor-pointer"
+                >
+                  <span>Thêm vào giỏ</span>
+                  <span>{totalPrice.toLocaleString('vi-VN')}đ</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  className="flex-1 py-3.5 px-4 bg-gradient-to-r from-[#8C4A26] to-[#A8582C] hover:from-[#753A1B] hover:to-[#8C4A26] text-white rounded-xl font-bold text-sm shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Lock className="w-4 h-4 text-[#F5BD42]" />
+                  <span>Đăng nhập / Đăng ký để thêm món</span>
+                </button>
+              )}
             </div>
           )}
         </div>

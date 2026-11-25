@@ -1,7 +1,8 @@
 import React from 'react';
-import { X, Trash2, Plus, Minus, ArrowRight, ShoppingBag } from 'lucide-react';
+import { X, Trash2, Plus, Minus, ArrowRight, ShoppingBag, Lock } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useStore } from '../context/StoreContext';
+import { useCustomer } from '../context/CustomerContext';
 
 interface CartDrawerProps {
   onCheckout: () => void;
@@ -10,6 +11,7 @@ interface CartDrawerProps {
 export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout }) => {
   const { isCartDrawerOpen, setIsCartDrawerOpen, items, updateQuantity, removeFromCart, subtotal, totalItemsCount } = useCart();
   const { settings } = useStore();
+  const { customer, openAuthModal } = useCustomer();
 
   if (!isCartDrawerOpen) return null;
 
@@ -137,21 +139,34 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout }) => {
               </p>
             )}
 
-            <button
-              onClick={() => {
-                setIsCartDrawerOpen(false);
-                onCheckout();
-              }}
-              disabled={isBelowMinOrder}
-              className={`w-full py-3.5 px-4 rounded-xl font-black text-base shadow-lg transition-all flex items-center justify-center gap-2 ${
-                isBelowMinOrder
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-[#8C4A26] hover:bg-[#753A1B] text-white hover:shadow-xl cursor-pointer'
-              }`}
-            >
-              <span>Tiến hành đặt hàng</span>
-              <ArrowRight className="w-5 h-5" />
-            </button>
+            {!customer ? (
+              <button
+                onClick={() => {
+                  setIsCartDrawerOpen(false);
+                  openAuthModal('register');
+                }}
+                className="w-full py-3.5 px-4 rounded-xl font-black text-sm bg-gradient-to-r from-[#8C4A26] to-[#A8582C] hover:from-[#753A1B] hover:to-[#8C4A26] text-white shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Lock className="w-4 h-4 text-[#F5BD42]" />
+                <span>Đăng nhập / Đăng ký để thanh toán</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  setIsCartDrawerOpen(false);
+                  onCheckout();
+                }}
+                disabled={isBelowMinOrder}
+                className={`w-full py-3.5 px-4 rounded-xl font-black text-base shadow-lg transition-all flex items-center justify-center gap-2 ${
+                  isBelowMinOrder
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-[#8C4A26] hover:bg-[#753A1B] text-white hover:shadow-xl cursor-pointer'
+                }`}
+              >
+                <span>Tiến hành đặt hàng</span>
+                <ArrowRight className="w-5 h-5" />
+              </button>
+            )}
           </div>
         )}
 

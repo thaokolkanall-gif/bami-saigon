@@ -14,7 +14,7 @@ interface CheckoutPageProps {
 export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrderSuccess }) => {
   const { items, subtotal, clearCart, promoCode, setPromoCode, discountAmount, setDiscountAmount } = useCart();
   const { settings } = useStore();
-  const { customer } = useCustomer();
+  const { customer, openAuthModal } = useCustomer();
 
   const [orderType, setOrderType] = useState<'pickup' | 'delivery'>('delivery');
   const [customerName, setCustomerName] = useState(customer?.full_name || '');
@@ -98,6 +98,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
+
+    if (!customer) {
+      setErrorMessage('Quý khách vui lòng đăng nhập hoặc tạo tài khoản để hoàn tất đặt hàng');
+      openAuthModal('register');
+      return;
+    }
 
     if (!customerName.trim() || !customerPhone.trim()) {
       setErrorMessage('Vui lòng nhập họ tên và số điện thoại nhận hàng');
@@ -256,9 +262,45 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
           Đặt Hàng Bami Sài Gòn
         </h1>
         <p className="text-xs sm:text-sm text-gray-600 mt-1">
-          Không cần tạo tài khoản. Bánh mì sẽ được nướng nóng giòn ngay sau khi quán xác nhận.
+          {customer 
+            ? `Xin chào ${customer.full_name}, bánh mì sẽ được nướng nóng giòn ngay sau khi xác nhận.` 
+            : 'Vui lòng đăng nhập hoặc tạo tài khoản để hoàn tất đơn hàng.'}
         </p>
       </div>
+
+      {!customer && (
+        <div className="mb-8 p-5 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3 text-center sm:text-left">
+            <div className="w-12 h-12 rounded-2xl bg-[#8C4A26] text-[#F5BD42] flex items-center justify-center shrink-0">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <div>
+              <h4 className="font-bold text-sm sm:text-base text-[#4A2115]">
+                Bạn chưa đăng nhập tài khoản
+              </h4>
+              <p className="text-xs text-gray-600 mt-0.5">
+                Đăng ký tài khoản trong 30 giây để lưu địa chỉ, tích điểm và theo dõi đơn hàng.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => openAuthModal('login')}
+              className="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-amber-300 text-[#4A2115] font-bold text-xs rounded-xl hover:bg-amber-100 transition-colors cursor-pointer"
+            >
+              Đăng nhập
+            </button>
+            <button
+              type="button"
+              onClick={() => openAuthModal('register')}
+              className="flex-1 sm:flex-none px-5 py-2.5 bg-[#8C4A26] text-white font-bold text-xs rounded-xl hover:bg-[#753A1B] shadow-sm transition-all cursor-pointer"
+            >
+              Đăng ký ngay
+            </button>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmitOrder} className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         

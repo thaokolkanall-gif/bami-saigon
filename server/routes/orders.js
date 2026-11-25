@@ -85,6 +85,10 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
   } = req.body;
 
   // Validation
+  if (!customer_id) {
+    return res.status(401).json({ error: 'Quý khách vui lòng đăng nhập hoặc tạo tài khoản để đặt hàng' });
+  }
+
   if (!customer_name || !customer_phone || !order_type || !items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Vui lòng cung cấp đầy đủ thông tin đơn hàng và danh sách món' });
   }
