@@ -195,7 +195,36 @@ function initDatabase() {
   try { db.exec(`ALTER TABLE orders ADD COLUMN customer_lat REAL;`); } catch(e){}
   try { db.exec(`ALTER TABLE orders ADD COLUMN customer_lng REAL;`); } catch(e){}
 
-  // Ensure distance shipping settings exist
+  // 1. Seed default data if categories empty
+  seedDefaultData();
+
+  // 2. Always guarantee default admin and staff exist & active
+  try {
+    const ownerHash = bcrypt.hashSync('admin123', 10);
+    const staffHash = bcrypt.hashSync('nhanvien123', 10);
+
+    const adminUser = db.prepare('SELECT id FROM users WHERE username = ?').get('admin');
+    if (!adminUser) {
+      db.prepare('INSERT INTO users (username, password_hash, full_name, role, is_active) VALUES (?, ?, ?, ?, 1)')
+        .run('admin', ownerHash, 'Chủ Quán Bami', 'owner');
+    } else {
+      db.prepare('UPDATE users SET password_hash = ?, is_active = 1 WHERE username = ?')
+        .run(ownerHash, 'admin');
+    }
+
+    const staffUser = db.prepare('SELECT id FROM users WHERE username = ?').get('nhanvien');
+    if (!staffUser) {
+      db.prepare('INSERT INTO users (username, password_hash, full_name, role, is_active) VALUES (?, ?, ?, ?, 1)')
+        .run('nhanvien', staffHash, 'Thu Ngân & Bếp', 'staff');
+    } else {
+      db.prepare('UPDATE users SET password_hash = ?, is_active = 1 WHERE username = ?')
+        .run(staffHash, 'nhanvien');
+    }
+  } catch (err) {
+    console.error('Error ensuring admin user:', err);
+  }
+
+  // 3. Ensure distance shipping settings exist
   const ensureSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   ensureSetting.run('store_lat', '10.771971');
   ensureSetting.run('store_lng', '106.692237');
@@ -204,13 +233,11 @@ function initDatabase() {
   ensureSetting.run('fee_per_km', '5000');
   ensureSetting.run('max_delivery_km', '15');
   ensureSetting.run('google_map_url', 'https://maps.google.com/?q=10.771971,106.692237');
-
-  seedDefaultData();
 }
 
 function seedDefaultData() {
-  // Check if store settings already exist
-  const countRow = db.prepare('SELECT COUNT(*) as count FROM settings').get();
+  // Check if categories already exist
+  const countRow = db.prepare('SELECT COUNT(*) as count FROM categories').get();
   if (countRow.count > 0) return; // already initialized
 
   console.log('Seeding initial data for Bami Sài Gòn...');
