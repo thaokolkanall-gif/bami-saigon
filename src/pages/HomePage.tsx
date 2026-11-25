@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Sparkles, Clock, Phone, MapPin, ShieldCheck, Tag, ShoppingBag } from 'lucide-react';
+import { ArrowRight, Sparkles, Clock, Phone, MapPin, ShieldCheck, Tag, ShoppingBag, Navigation } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { Product, Combo, Promotion, Topping } from '../types';
 import { DishDetailModal } from '../components/DishDetailModal';
@@ -400,6 +400,15 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               </div>
 
               <div className="flex flex-wrap gap-4 pt-2">
+                <a
+                  href={settings?.google_map_url || `https://www.google.com/maps/dir/?api=1&destination=${settings?.store_lat || '10.771971'},${settings?.store_lng || '106.692237'}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-6 py-3 rounded-xl bg-[#F5BD42] hover:bg-[#E5AC32] text-[#4A2115] font-black text-sm shadow-md transition-all flex items-center gap-2"
+                >
+                  <Navigation className="w-4 h-4 text-[#8C4A26]" />
+                  <span>Chỉ đường trên Google Maps</span>
+                </a>
                 {settings?.phone && (
                   <a
                     href={`tel:${settings.phone.replace(/\s+/g, '')}`}

@@ -113,7 +113,10 @@ function initDatabase() {
       order_type TEXT CHECK(order_type IN ('pickup', 'delivery')) NOT NULL,
       address TEXT,
       address_note TEXT,
-      delivery_zone_id INTEGER REFERENCES delivery_zones(id),
+      distance_km REAL DEFAULT 0,
+      customer_lat REAL,
+      customer_lng REAL,
+      delivery_zone_id INTEGER,
       pickup_time TEXT,
       order_note TEXT,
       payment_method TEXT CHECK(payment_method IN ('cod', 'transfer')) NOT NULL DEFAULT 'cod',
@@ -186,6 +189,21 @@ function initDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // Migrations for distance & Google Maps fields
+  try { db.exec(`ALTER TABLE orders ADD COLUMN distance_km REAL DEFAULT 0;`); } catch(e){}
+  try { db.exec(`ALTER TABLE orders ADD COLUMN customer_lat REAL;`); } catch(e){}
+  try { db.exec(`ALTER TABLE orders ADD COLUMN customer_lng REAL;`); } catch(e){}
+
+  // Ensure distance shipping settings exist
+  const ensureSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
+  ensureSetting.run('store_lat', '10.771971');
+  ensureSetting.run('store_lng', '106.692237');
+  ensureSetting.run('base_shipping_fee', '15000');
+  ensureSetting.run('base_shipping_km', '2');
+  ensureSetting.run('fee_per_km', '5000');
+  ensureSetting.run('max_delivery_km', '15');
+  ensureSetting.run('google_map_url', 'https://maps.google.com/?q=10.771971,106.692237');
 
   seedDefaultData();
 }

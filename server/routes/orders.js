@@ -39,6 +39,19 @@ router.get('/events', (req, res) => {
   });
 });
 
+// Helper: Calculate distance in km between two GPS coordinates (Haversine formula)
+function calculateHaversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return Math.round((R * c) * 10) / 10;
+}
+
 // Helper: Generate human-friendly order code e.g. BAMI-8924
 function generateOrderCode() {
   const rand = Math.floor(1000 + Math.random() * 9000);
@@ -58,7 +71,9 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
     order_type,
     address,
     address_note,
-    delivery_zone_id,
+    distance_km,
+    customer_lat,
+    customer_lng,
     pickup_time,
     order_note,
     payment_method,
@@ -164,23 +179,37 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
     });
   }
 
-  // Calculate Delivery Fee
+  // Calculate Delivery Fee based on distance (km)
   let deliveryFee = 0;
+  let finalDistanceKm = 0;
   if (order_type === 'delivery') {
-    if (delivery_zone_id) {
-      const zone = db.prepare('SELECT fee, min_order FROM delivery_zones WHERE id = ? AND is_active = 1').get(delivery_zone_id);
-      if (zone) {
-        if (zone.min_order && subtotal < zone.min_order) {
-          return res.status(400).json({
-            error: `Khu vực này yêu cầu đơn tối thiểu ${zone.min_order.toLocaleString('vi-VN')}đ`
-          });
-        }
-        deliveryFee = zone.fee;
-      } else {
-        return res.status(400).json({ error: 'Khu vực giao hàng được chọn không hợp lệ hoặc quán chưa phục vụ khu vực này.' });
-      }
+    const settingsRows = db.prepare('SELECT key, value FROM settings').all();
+    const sMap = {};
+    for (const row of settingsRows) sMap[row.key] = row.value;
+
+    const baseKm = parseFloat(sMap.base_shipping_km || '2');
+    const baseFee = parseInt(sMap.base_shipping_fee || '15000');
+    const feePerKm = parseInt(sMap.fee_per_km || '5000');
+    const maxKm = parseFloat(sMap.max_delivery_km || '15');
+    const storeLat = parseFloat(sMap.store_lat || '10.771971');
+    const storeLng = parseFloat(sMap.store_lng || '106.692237');
+
+    finalDistanceKm = parseFloat(distance_km) || 1.0;
+    if (customer_lat && customer_lng) {
+      finalDistanceKm = calculateHaversineKm(storeLat, storeLng, parseFloat(customer_lat), parseFloat(customer_lng));
+    }
+
+    if (finalDistanceKm > maxKm) {
+      return res.status(400).json({
+        error: `Khoảng cách giao hàng (${finalDistanceKm} km) vượt quá bán kính giao tối đa (${maxKm} km) của quán. Quý khách vui lòng chọn Nhận tại quán hoặc gọi hotline.`
+      });
+    }
+
+    if (finalDistanceKm <= baseKm) {
+      deliveryFee = baseFee;
     } else {
-      return res.status(400).json({ error: 'Quý khách vui lòng chọn khu vực giao hàng để tính phí chính xác.' });
+      const extraKm = Math.ceil(finalDistanceKm - baseKm);
+      deliveryFee = baseFee + (extraKm * feePerKm);
     }
   }
 
@@ -219,10 +248,10 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
     const orderResult = db.prepare(`
       INSERT INTO orders (
         order_code, tracking_token, customer_name, customer_phone, order_type,
-        address, address_note, delivery_zone_id, pickup_time, order_note,
+        address, address_note, distance_km, customer_lat, customer_lng, pickup_time, order_note,
         payment_method, payment_status, status, subtotal, discount_amount,
         delivery_fee, total_amount, idempotency_key
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid', 'new', ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid', 'new', ?, ?, ?, ?, ?)
     `).run(
       orderCode,
       trackingToken,
@@ -231,7 +260,9 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
       order_type,
       address || null,
       address_note || null,
-      delivery_zone_id || null,
+      finalDistanceKm,
+      customer_lat ? parseFloat(customer_lat) : null,
+      customer_lng ? parseFloat(customer_lng) : null,
       pickup_time || null,
       order_note || null,
       payment_method === 'transfer' ? 'transfer' : 'cod',

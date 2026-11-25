@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { ArrowLeft, CheckCircle2, ShieldCheck, MapPin, Store, CreditCard, Banknote, AlertCircle, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, CheckCircle2, ShieldCheck, MapPin, Store, CreditCard, Banknote, AlertCircle, Sparkles, Navigation, ExternalLink } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useStore } from '../context/StoreContext';
+import { DeliveryMapPicker } from '../components/DeliveryMapPicker';
 import confetti from 'canvas-confetti';
 
 interface CheckoutPageProps {
@@ -11,15 +12,30 @@ interface CheckoutPageProps {
 
 export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrderSuccess }) => {
   const { items, subtotal, clearCart, promoCode, setPromoCode, discountAmount, setDiscountAmount } = useCart();
-  const { settings, zones } = useStore();
+  const { settings } = useStore();
 
   const [orderType, setOrderType] = useState<'pickup' | 'delivery'>('delivery');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [address, setAddress] = useState('');
   const [addressNote, setAddressNote] = useState('');
-  const [selectedZoneId, setSelectedZoneId] = useState<number | ''>(zones.length > 0 ? zones[0].id : '');
-  const [pickupTime, setPickupTime] = useState('Ngay khi quán chuẩn bị xong (khoảng 15-20 phút)');
+  
+  // Distance-based map delivery state
+  const storeLat = parseFloat(settings?.store_lat || '10.771971');
+  const storeLng = parseFloat(settings?.store_lng || '106.692237');
+  const storeAddress = settings?.address || '135 Nguyễn Thị Minh Khai, Phường Bến Thành, Quận 1, TP. Hồ Chí Minh';
+  const baseFee = parseInt(settings?.base_shipping_fee || '15000');
+  const baseKm = parseFloat(settings?.base_shipping_km || '2');
+  const feePerKm = parseInt(settings?.fee_per_km || '5000');
+  const maxKm = parseFloat(settings?.max_delivery_km || '15');
+
+  const [customerLat, setCustomerLat] = useState<number>(storeLat + 0.012);
+  const [customerLng, setCustomerLng] = useState<number>(storeLng + 0.012);
+  const [distanceKm, setDistanceKm] = useState<number>(1.5);
+  const [deliveryFee, setDeliveryFee] = useState<number>(baseFee);
+  const [isOutOfRange, setIsOutOfRange] = useState<boolean>(false);
+
+  const [pickupTime, setPickupTime] = useState('Ngay khi chuẩn bị xong (khoảng 15-20 phút)');
   const [orderNote, setOrderNote] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cod' | 'transfer'>('cod');
 
@@ -30,10 +46,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Selected delivery zone details
-  const selectedZone = zones.find(z => z.id === selectedZoneId);
-  const deliveryFee = orderType === 'delivery' && selectedZone ? selectedZone.fee : 0;
-  const finalTotal = Math.max(0, subtotal - discountAmount + deliveryFee);
+  // Shipping fee logic: 0 for pickup, calculated by distance for delivery
+  const actualDeliveryFee = orderType === 'delivery' ? deliveryFee : 0;
+  const finalTotal = Math.max(0, subtotal - discountAmount + actualDeliveryFee);
 
   // Apply Voucher
   const handleApplyVoucher = async () => {
@@ -70,9 +85,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
       return;
     }
 
-    if (orderType === 'delivery' && !address.trim()) {
-      setErrorMessage('Vui lòng nhập địa chỉ giao hàng cụ thể');
-      return;
+    if (orderType === 'delivery') {
+      if (!address.trim()) {
+        setErrorMessage('Vui lòng nhập địa chỉ giao hàng cụ thể hoặc chọn vị trí trên bản đồ');
+        return;
+      }
+      if (isOutOfRange) {
+        setErrorMessage(`Khoảng cách giao hàng (${distanceKm} km) vượt quá bán kính tối đa (${maxKm} km) của quán. Vui lòng chọn Nhận tại quán hoặc gọi hotline.`);
+        return;
+      }
     }
 
     if (items.length === 0) {
@@ -90,7 +111,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
       order_type: orderType,
       address: orderType === 'delivery' ? address : null,
       address_note: orderType === 'delivery' ? addressNote : null,
-      delivery_zone_id: orderType === 'delivery' ? selectedZoneId : null,
+      distance_km: orderType === 'delivery' ? distanceKm : null,
+      customer_lat: orderType === 'delivery' ? customerLat : null,
+      customer_lng: orderType === 'delivery' ? customerLng : null,
       pickup_time: orderType === 'pickup' ? pickupTime : null,
       order_note: orderNote,
       payment_method: paymentMethod,
@@ -136,6 +159,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
   const bankOwner = settings?.bank_owner || 'BAMI SAI GON';
   const vietqrUrl = `https://img.vietqr.io/image/${bankName}-${bankAccount}-compact2.png?amount=${finalTotal}&addInfo=BAMI%20${customerPhone.replace(/\s+/g, '')}&accountName=${encodeURIComponent(bankOwner)}`;
 
+  // Google Maps store directions URL
+  const googleMapsStoreUrl = settings?.google_map_url || `https://www.google.com/maps/dir/?api=1&destination=${storeLat},${storeLng}`;
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
       
@@ -153,7 +179,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
           Đặt Hàng Bami Sài Gòn
         </h1>
         <p className="text-xs sm:text-sm text-gray-600 mt-1">
-          Không cần tạo tài khoản. Bánh mì sẽ được nướng nóng ngay sau khi quán xác nhận.
+          Không cần tạo tài khoản. Bánh mì sẽ được nướng nóng giòn ngay sau khi quán xác nhận.
         </p>
       </div>
 
@@ -192,8 +218,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
 
           {/* Customer Info Form */}
           <div className="bg-white p-6 rounded-3xl border border-amber-200/80 shadow-xs space-y-4">
-            <h3 className="font-bold text-base text-[#4A2115] border-b border-amber-100 pb-2">
-              Thông tin người nhận
+            <h3 className="font-bold text-base text-[#4A2115] border-b border-amber-100 pb-2 flex items-center gap-2">
+              <span>Thông tin khách hàng</span>
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -227,27 +253,44 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
             </div>
 
             {orderType === 'delivery' ? (
-              <>
-                <div>
-                  <label className="block text-xs font-bold text-[#4A2115] mb-1">
-                    Khu vực giao hàng *
-                  </label>
-                  <select
-                    value={selectedZoneId}
-                    onChange={(e) => setSelectedZoneId(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-amber-200 bg-[#FFF8E8]/40 text-sm focus:bg-white focus:outline-hidden focus:border-[#8C4A26]"
-                  >
-                    {zones.map(z => (
-                      <option key={z.id} value={z.id}>
-                        {z.zone_name} (Phí: {z.fee.toLocaleString('vi-VN')}đ)
-                      </option>
-                    ))}
-                  </select>
+              <div className="space-y-4 pt-2">
+                <div className="border-t border-amber-100 pt-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-bold text-[#4A2115]">
+                      🗺️ Chọn vị trí giao hàng & Tính phí tự động
+                    </label>
+                    <span className="text-[11px] text-gray-500">
+                      Bấm lên bản đồ hoặc kéo ghim đỏ
+                    </span>
+                  </div>
+
+                  {/* Interactive Map Picker with distance calculation */}
+                  <DeliveryMapPicker
+                    storeLat={storeLat}
+                    storeLng={storeLng}
+                    storeAddress={storeAddress}
+                    baseFee={baseFee}
+                    baseKm={baseKm}
+                    feePerKm={feePerKm}
+                    maxKm={maxKm}
+                    initialLat={customerLat}
+                    initialLng={customerLng}
+                    onLocationChange={({ lat, lng, distanceKm, shippingFee, suggestedAddress, isOutOfRange }) => {
+                      setCustomerLat(lat);
+                      setCustomerLng(lng);
+                      setDistanceKm(distanceKm);
+                      setDeliveryFee(shippingFee);
+                      setIsOutOfRange(isOutOfRange);
+                      if (suggestedAddress && !address) {
+                        setAddress(suggestedAddress);
+                      }
+                    }}
+                  />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-[#4A2115] mb-1">
-                    Địa chỉ chi tiết (Số nhà, tên đường, tòa nhà...) *
+                    Địa chỉ chi tiết (Số nhà, tên đường, tòa nhà, lầu...) *
                   </label>
                   <input
                     type="text"
@@ -271,25 +314,48 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
                     className="w-full px-3.5 py-2.5 rounded-xl border border-amber-200 bg-[#FFF8E8]/40 text-sm focus:bg-white focus:outline-hidden focus:border-[#8C4A26]"
                   />
                 </div>
-              </>
+              </div>
             ) : (
-              <div>
-                <label className="block text-xs font-bold text-[#4A2115] mb-1">
-                  Thời gian bạn ghé nhận bánh
-                </label>
-                <select
-                  value={pickupTime}
-                  onChange={(e) => setPickupTime(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-amber-200 bg-[#FFF8E8]/40 text-sm focus:bg-white focus:outline-hidden focus:border-[#8C4A26]"
-                >
-                  <option value="Ngay khi chuẩn bị xong (khoảng 15-20 phút)">Ngay khi chuẩn bị xong (khoảng 15-20 phút)</option>
-                  <option value="Sau 30 phút">Sau 30 phút</option>
-                  <option value="Sau 45 phút">Sau 45 phút</option>
-                  <option value="Sau 1 tiếng">Sau 1 tiếng</option>
-                </select>
-                <p className="text-xs text-amber-800 bg-amber-50 p-2.5 rounded-xl mt-2">
-                  📍 Địa chỉ nhận bánh: <strong>{settings?.address || '135 Nguyễn Thị Minh Khai, Q.1, TP.HCM'}</strong>
-                </p>
+              <div className="space-y-4 pt-2">
+                <div>
+                  <label className="block text-xs font-bold text-[#4A2115] mb-1">
+                    Thời gian bạn ghé nhận bánh
+                  </label>
+                  <select
+                    value={pickupTime}
+                    onChange={(e) => setPickupTime(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-amber-200 bg-[#FFF8E8]/40 text-sm focus:bg-white focus:outline-hidden focus:border-[#8C4A26]"
+                  >
+                    <option value="Ngay khi chuẩn bị xong (khoảng 15-20 phút)">Ngay khi chuẩn bị xong (khoảng 15-20 phút)</option>
+                    <option value="Sau 30 phút">Sau 30 phút</option>
+                    <option value="Sau 45 phút">Sau 45 phút</option>
+                    <option value="Sau 1 tiếng">Sau 1 tiếng</option>
+                  </select>
+                </div>
+
+                {/* Store Location & Google Maps Card */}
+                <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-[#8C4A26] text-white flex items-center justify-center shrink-0">
+                      <Store className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-bold text-xs text-[#4A2115]">Địa chỉ quán Bami Sài Gòn:</p>
+                      <p className="text-xs text-gray-700 font-medium mt-0.5">{storeAddress}</p>
+                      <p className="text-[11px] text-gray-500 mt-1">Giờ mở cửa: 06:00 - 22:00 hàng ngày</p>
+                    </div>
+                  </div>
+
+                  <a
+                    href={googleMapsStoreUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-white hover:bg-amber-100 text-[#8C4A26] font-bold text-xs border border-amber-300 shadow-2xs transition-all"
+                  >
+                    <Navigation className="w-4 h-4 text-[#8C4A26]" />
+                    <span>Mở Google Maps chỉ đường đến quán →</span>
+                  </a>
+                </div>
               </div>
             )}
 
@@ -469,7 +535,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
                   {orderType === 'pickup' ? (
                     <span className="text-emerald-700 font-medium">Miễn phí (Nhận tại quán)</span>
                   ) : (
-                    `${deliveryFee.toLocaleString('vi-VN')}đ`
+                    <span className="font-semibold text-[#8C4A26]">
+                      {deliveryFee.toLocaleString('vi-VN')}đ
+                      <span className="text-[11px] text-gray-500 font-normal ml-1">({distanceKm} km)</span>
+                    </span>
                   )}
                 </span>
               </div>
@@ -488,12 +557,23 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
               </div>
             )}
 
+            {/* Out of range alert */}
+            {orderType === 'delivery' && isOutOfRange && (
+              <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-700 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">Vượt quá bán kính giao hàng ({maxKm} km)</p>
+                  <p className="text-[11px] mt-0.5">Vị trí đã chọn cách quán {distanceKm} km. Vui lòng chuyển sang "Nhận tại quán" hoặc liên hệ hotline để được hỗ trợ giao đặc biệt.</p>
+                </div>
+              </div>
+            )}
+
             {/* Submit CTA */}
             <button
               type="submit"
-              disabled={isSubmitting || items.length === 0}
+              disabled={isSubmitting || items.length === 0 || (orderType === 'delivery' && isOutOfRange)}
               className={`w-full py-4 px-6 rounded-2xl font-black text-base shadow-xl transition-all cursor-pointer ${
-                isSubmitting 
+                isSubmitting || (orderType === 'delivery' && isOutOfRange)
                   ? 'bg-gray-400 text-white cursor-not-allowed'
                   : 'bg-[#8C4A26] hover:bg-[#753A1B] text-white hover:shadow-2xl'
               }`}

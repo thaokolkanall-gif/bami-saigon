@@ -26,6 +26,13 @@ export interface StoreSettings {
   vietqr_memo_prefix: string;
   min_order_value: string;
   is_configured: string;
+  store_lat?: string;
+  store_lng?: string;
+  base_shipping_fee?: string;
+  base_shipping_km?: string;
+  fee_per_km?: string;
+  max_delivery_km?: string;
+  google_map_url?: string;
   privacy_policy?: string;
   delivery_policy?: string;
   cancel_policy?: string;
@@ -139,7 +146,10 @@ export interface Order {
   order_type: 'pickup' | 'delivery';
   address: string | null;
   address_note: string | null;
-  delivery_zone_id: number | null;
+  distance_km?: number;
+  customer_lat?: number;
+  customer_lng?: number;
+  delivery_zone_id?: number | null;
   pickup_time: string | null;
   order_note: string | null;
   payment_method: 'cod' | 'transfer';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Phone, MapPin, CheckCircle2, Clock, XCircle, AlertCircle, FileText, Printer, Check } from 'lucide-react';
+import { Search, Filter, Phone, MapPin, CheckCircle2, Clock, XCircle, AlertCircle, FileText, Printer, Check, Navigation, ExternalLink } from 'lucide-react';
 import { Order } from '../../types';
 
 interface AdminOrdersProps {
@@ -387,12 +387,39 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ initialStatusFilter = 
               </div>
 
               {selectedOrder.order_type === 'delivery' && (
-                <div className="sm:col-span-2 pt-2 border-t border-amber-200/60">
-                  <p className="text-gray-500">Địa chỉ giao hàng:</p>
-                  <p className="font-bold text-sm text-[#4A2115] mt-0.5">{selectedOrder.address}</p>
+                <div className="sm:col-span-2 pt-2 border-t border-amber-200/60 space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <p className="text-gray-500">Địa chỉ giao hàng:</p>
+                      <p className="font-bold text-sm text-[#4A2115] mt-0.5">{selectedOrder.address}</p>
+                    </div>
+                    {selectedOrder.distance_km && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-[#8C4A26] font-bold text-xs self-start sm:self-auto">
+                        📍 Cách quán: {selectedOrder.distance_km} km
+                      </span>
+                    )}
+                  </div>
+
                   {selectedOrder.address_note && (
-                    <p className="text-gray-600 italic mt-0.5">Chỉ dẫn: {selectedOrder.address_note}</p>
+                    <p className="text-gray-600 italic text-xs">Chỉ dẫn: {selectedOrder.address_note}</p>
                   )}
+
+                  <div className="pt-1">
+                    <a
+                      href={
+                        selectedOrder.customer_lat && selectedOrder.customer_lng
+                          ? `https://www.google.com/maps/dir/?api=1&destination=${selectedOrder.customer_lat},${selectedOrder.customer_lng}`
+                          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedOrder.address || '')}`
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#8C4A26] hover:bg-[#753A1B] text-white font-bold text-xs shadow-2xs transition-all"
+                    >
+                      <Navigation className="w-3.5 h-3.5 text-[#F5BD42]" />
+                      <span>Mở Google Maps dẫn đường giao hàng</span>
+                      <ExternalLink className="w-3 h-3 ml-0.5" />
+                    </a>
+                  </div>
                 </div>
               )}
 

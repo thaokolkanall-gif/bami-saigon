@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle2, Clock, Phone, MessageCircle, AlertCircle, Copy, Check, ArrowRight, ShieldAlert } from 'lucide-react';
+import { CheckCircle2, Clock, Phone, MessageCircle, AlertCircle, Copy, Check, ArrowRight, ShieldAlert, Navigation, ExternalLink } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 
 interface OrderTrackingPageProps {
@@ -189,19 +189,43 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({ trackingTo
           </div>
 
           {order.order_type === 'delivery' && (
-            <div className="sm:col-span-2">
-              <p className="text-gray-500">Địa chỉ giao bánh:</p>
+            <div className="sm:col-span-2 space-y-1">
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <p className="text-gray-500">Địa chỉ giao bánh:</p>
+                {order.distance_km && (
+                  <span className="text-[11px] font-bold text-[#8C4A26] bg-amber-100 px-2 py-0.5 rounded-md">
+                    Cách quán: {order.distance_km} km
+                  </span>
+                )}
+              </div>
               <p className="font-bold text-sm text-[#4A2115] mt-0.5">{order.address}</p>
               {order.address_note && (
-                <p className="text-gray-500 italic mt-0.5">Chỉ dẫn: {order.address_note}</p>
+                <p className="text-gray-500 italic text-xs">Chỉ dẫn: {order.address_note}</p>
               )}
             </div>
           )}
 
           {order.order_type === 'pickup' && (
-            <div className="sm:col-span-2">
-              <p className="text-gray-500">Thời gian nhận dự kiến:</p>
-              <p className="font-bold text-sm text-[#4A2115] mt-0.5">{order.pickup_time}</p>
+            <div className="sm:col-span-2 space-y-2">
+              <div>
+                <p className="text-gray-500">Thời gian nhận dự kiến:</p>
+                <p className="font-bold text-sm text-[#4A2115] mt-0.5">{order.pickup_time}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="font-bold text-[#4A2115]">Địa chỉ nhận tại quán:</span>
+                  <p className="text-gray-600">{settings?.address || '135 Nguyễn Thị Minh Khai, Q.1, TP.HCM'}</p>
+                </div>
+                <a
+                  href={settings?.google_map_url || `https://www.google.com/maps/dir/?api=1&destination=${settings?.store_lat || '10.771971'},${settings?.store_lng || '106.692237'}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#8C4A26] text-white font-bold text-xs shrink-0 self-start sm:self-auto"
+                >
+                  <Navigation className="w-3.5 h-3.5 text-[#F5BD42]" />
+                  <span>Chỉ đường Google Maps</span>
+                </a>
+              </div>
             </div>
           )}
 
