@@ -1,0 +1,48 @@
+{
+  "name": "bami-saigon",
+  "version": "1.0.0",
+  "description": "Website đặt món và quản trị Bánh Mì Bami Sài Gòn",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "concurrently \"node server/index.js\" \"vite\"",
+    "server": "node server/index.js",
+    "client": "vite",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "banh-mi",
+    "bami-saigon",
+    "restaurant",
+    "ordering-system",
+    "ecommerce"
+  ],
+  "author": "Bami Sài Gòn",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "better-sqlite3": "^13.2.0",
+    "canvas-confetti": "^1.9.4",
+    "cors": "^2.8.5",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^1.16.0",
+    "multer": "^2.1.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.18",
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/node": "^25.3.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "concurrently": "^9.2.1",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
+  }
+}
