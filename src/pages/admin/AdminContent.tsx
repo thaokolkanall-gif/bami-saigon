@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Check, FileText, Image as ImageIcon } from 'lucide-react';
+import { Save, Check, FileText, Image as ImageIcon, Upload } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 
 export const AdminContent: React.FC = () => {
@@ -7,6 +7,7 @@ export const AdminContent: React.FC = () => {
   const [formData, setFormData] = useState<any>({});
   const [isSaving, setIsSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [uploadingField, setUploadingField] = useState<string | null>(null);
 
   useEffect(() => {
     if (settings) {
@@ -16,6 +17,34 @@ export const AdminContent: React.FC = () => {
 
   const handleChange = (key: string, val: any) => {
     setFormData((prev: any) => ({ ...prev, [key]: val }));
+  };
+
+  const handleUpload = async (key: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const data = new FormData();
+    data.append('image', file);
+
+    setUploadingField(key);
+    const token = localStorage.getItem('bami_token');
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: data
+      });
+      const result = await res.json();
+      if (res.ok && result.url) {
+        handleChange(key, result.url);
+      } else {
+        alert(result.error || 'Lỗi tải ảnh');
+      }
+    } catch (err) {
+      alert('Lỗi kết nối máy chủ khi tải ảnh');
+    } finally {
+      setUploadingField(null);
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -127,14 +156,36 @@ export const AdminContent: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-[#4A2115] mb-1">Đường dẫn ảnh nổi bật (hero_image)</label>
-            <input
-              type="text"
-              value={formData.hero_image || ''}
-              onChange={(e) => handleChange('hero_image', e.target.value)}
-              placeholder="/bami-saigon-store.jpg hoặc URL ảnh trực tuyến..."
-              className="w-full px-3.5 py-2.5 rounded-xl border border-amber-200 text-xs"
-            />
+            <label className="block text-xs font-bold text-[#4A2115] mb-1">Ảnh bìa nổi bật (Hero Image)</label>
+            <div className="flex items-center gap-3">
+              <img
+                src={formData.hero_image || '/bami-saigon-store.jpg'}
+                alt="Hero Preview"
+                className="w-16 h-16 rounded-2xl object-cover border-2 border-amber-300 bg-amber-50 shrink-0 shadow-xs"
+              />
+              <div className="flex-1 space-y-2">
+                <div>
+                  <label className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#F5BD42] hover:bg-[#E5AC32] text-[#4A2115] text-xs font-bold rounded-xl cursor-pointer shadow-xs transition-colors">
+                    <Upload className="w-4 h-4 text-[#8C4A26]" />
+                    <span>{uploadingField === 'hero_image' ? 'Đang tải ảnh...' : 'Tải ảnh bìa từ máy / điện thoại'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploadingField === 'hero_image'}
+                      onChange={(e) => handleUpload('hero_image', e)}
+                    />
+                  </label>
+                </div>
+                <input
+                  type="text"
+                  value={formData.hero_image || ''}
+                  onChange={(e) => handleChange('hero_image', e.target.value)}
+                  placeholder="/bami-saigon-store.jpg hoặc dán URL ảnh trực tuyến..."
+                  className="w-full px-3.5 py-1.5 rounded-xl border border-amber-200 text-xs"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -165,13 +216,36 @@ export const AdminContent: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-[#4A2115] mb-1">Đường dẫn ảnh minh họa câu chuyện</label>
-            <input
-              type="text"
-              value={formData.brand_story_image || ''}
-              onChange={(e) => handleChange('brand_story_image', e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-amber-200 text-xs"
-            />
+            <label className="block text-xs font-bold text-[#4A2115] mb-1">Ảnh câu chuyện thương hiệu</label>
+            <div className="flex items-center gap-3">
+              <img
+                src={formData.brand_story_image || '/bami-saigon-store.jpg'}
+                alt="Story Preview"
+                className="w-16 h-16 rounded-2xl object-cover border-2 border-amber-300 bg-amber-50 shrink-0 shadow-xs"
+              />
+              <div className="flex-1 space-y-2">
+                <div>
+                  <label className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#F5BD42] hover:bg-[#E5AC32] text-[#4A2115] text-xs font-bold rounded-xl cursor-pointer shadow-xs transition-colors">
+                    <Upload className="w-4 h-4 text-[#8C4A26]" />
+                    <span>{uploadingField === 'brand_story_image' ? 'Đang tải ảnh...' : 'Tải ảnh minh họa từ máy / điện thoại'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploadingField === 'brand_story_image'}
+                      onChange={(e) => handleUpload('brand_story_image', e)}
+                    />
+                  </label>
+                </div>
+                <input
+                  type="text"
+                  value={formData.brand_story_image || ''}
+                  onChange={(e) => handleChange('brand_story_image', e.target.value)}
+                  placeholder="/bami-saigon-store.jpg hoặc dán URL ảnh trực tuyến..."
+                  className="w-full px-3.5 py-1.5 rounded-xl border border-amber-200 text-xs"
+                />
+              </div>
+            </div>
           </div>
         </div>
 

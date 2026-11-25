@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Check, X, Image as ImageIcon, Sparkles, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, X, Image as ImageIcon, Sparkles, AlertCircle, Upload } from 'lucide-react';
 import { Product, Category, Topping, Combo } from '../../types';
 
 export const AdminMenu: React.FC = () => {
@@ -9,11 +9,43 @@ export const AdminMenu: React.FC = () => {
   const [toppings, setToppings] = useState<Topping[]>([]);
   const [combos, setCombos] = useState<Combo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Edit / Add modal states
   const [editProduct, setEditProduct] = useState<Partial<Product> | null>(null);
   const [editCategory, setEditCategory] = useState<Partial<Category> | null>(null);
   const [editTopping, setEditTopping] = useState<Partial<Topping> | null>(null);
+
+  // Upload image handler
+  const handleUploadImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('image', file);
+
+    setIsUploading(true);
+    const token = localStorage.getItem('bami_token');
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+      const data = await res.json();
+      if (res.ok && data.url) {
+        setEditProduct(prev => prev ? { ...prev, image_url: data.url } : null);
+      } else {
+        alert(data.error || 'Lỗi khi tải ảnh lên');
+      }
+    } catch (err) {
+      alert('Không thể kết nối máy chủ để tải ảnh');
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const fetchMenuData = () => {
     fetch('/api/menu')
@@ -413,13 +445,36 @@ export const AdminMenu: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[#4A2115] mb-1">Đường dẫn ảnh (URL hoặc /bami-saigon-store.jpg)</label>
-              <input
-                type="text"
-                value={editProduct.image_url || ''}
-                onChange={(e) => setEditProduct({ ...editProduct, image_url: e.target.value })}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-amber-200"
-              />
+              <label className="block text-xs font-bold text-[#4A2115] mb-1">Ảnh món ăn</label>
+              <div className="flex items-center gap-3">
+                <img
+                  src={editProduct.image_url || '/bami-saigon-store.jpg'}
+                  alt="Ảnh món"
+                  className="w-16 h-16 rounded-2xl object-cover border-2 border-amber-300 bg-amber-50 shrink-0 shadow-xs"
+                />
+                <div className="flex-1 space-y-2">
+                  <div>
+                    <label className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#F5BD42] hover:bg-[#E5AC32] text-[#4A2115] text-xs font-bold rounded-xl cursor-pointer shadow-xs transition-colors">
+                      <Upload className="w-4 h-4 text-[#8C4A26]" />
+                      <span>{isUploading ? 'Đang tải ảnh lên...' : 'Chọn ảnh từ máy / điện thoại'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={isUploading}
+                        onChange={handleUploadImage}
+                      />
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Hoặc dán đường dẫn URL ảnh trực tuyến..."
+                    value={editProduct.image_url || ''}
+                    onChange={(e) => setEditProduct({ ...editProduct, image_url: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs rounded-xl border border-amber-200"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center gap-4 pt-2">
