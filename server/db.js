@@ -252,6 +252,8 @@ function initDatabase() {
   ensureSetting.run('base_shipping_km', '2');
   ensureSetting.run('fee_per_km', '5000');
   ensureSetting.run('max_delivery_km', '15');
+  ensureSetting.run('free_shipping_km', '0');
+  ensureSetting.run('shipping_formula_desc', '');
   ensureSetting.run('google_map_url', 'https://maps.google.com/?q=10.771971,106.692237');
   ensureSetting.run('admin_recovery_key', 'BAMI_ADMIN_MASTER_KEY_2026');
   ensureSetting.run('webhook_secret', 'bami_webhook_sec_2026');

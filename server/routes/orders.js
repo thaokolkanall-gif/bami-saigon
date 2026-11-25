@@ -197,6 +197,7 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
     const baseFee = parseInt(sMap.base_shipping_fee || '15000');
     const feePerKm = parseInt(sMap.fee_per_km || '5000');
     const maxKm = parseFloat(sMap.max_delivery_km || '15');
+    const freeKm = parseFloat(sMap.free_shipping_km || '0');
     const storeLat = parseFloat(sMap.store_lat || '10.771971');
     const storeLng = parseFloat(sMap.store_lng || '106.692237');
 
@@ -211,7 +212,10 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
       });
     }
 
-    if (finalDistanceKm <= baseKm) {
+    // Free shipping threshold by distance
+    if (freeKm > 0 && finalDistanceKm <= freeKm) {
+      deliveryFee = 0;
+    } else if (finalDistanceKm <= baseKm) {
       deliveryFee = baseFee;
     } else {
       const extraKm = Math.ceil(finalDistanceKm - baseKm);

@@ -32,6 +32,8 @@ export interface StoreSettings {
   base_shipping_km?: string;
   fee_per_km?: string;
   max_delivery_km?: string;
+  free_shipping_km?: string;
+  shipping_formula_desc?: string;
   google_map_url?: string;
   privacy_policy?: string;
   delivery_policy?: string;

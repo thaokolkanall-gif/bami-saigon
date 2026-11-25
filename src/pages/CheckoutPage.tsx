@@ -39,6 +39,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
   const baseKm = parseFloat(settings?.base_shipping_km || '2');
   const feePerKm = parseInt(settings?.fee_per_km || '5000');
   const maxKm = parseFloat(settings?.max_delivery_km || '15');
+  const freeKm = parseFloat(settings?.free_shipping_km || '0');
+  const formulaDesc = settings?.shipping_formula_desc || '';
 
   const [customerLat, setCustomerLat] = useState<number>(storeLat + 0.012);
   const [customerLng, setCustomerLng] = useState<number>(storeLng + 0.012);
@@ -392,6 +394,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
                     baseKm={baseKm}
                     feePerKm={feePerKm}
                     maxKm={maxKm}
+                    freeKm={freeKm}
+                    formulaDesc={formulaDesc}
                     initialLat={customerLat}
                     initialLng={customerLng}
                     onLocationChange={({ lat, lng, distanceKm, shippingFee, suggestedAddress, isOutOfRange }) => {
@@ -653,6 +657,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
                 <span>
                   {orderType === 'pickup' ? (
                     <span className="text-emerald-700 font-medium">Miễn phí (Nhận tại quán)</span>
+                  ) : deliveryFee === 0 ? (
+                    <span className="font-semibold text-emerald-700">
+                      Miễn phí giao hàng (0đ)
+                      <span className="text-[11px] text-gray-500 font-normal ml-1">({distanceKm} km)</span>
+                    </span>
                   ) : (
                     <span className="font-semibold text-[#8C4A26]">
                       {deliveryFee.toLocaleString('vi-VN')}đ

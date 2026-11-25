@@ -22,6 +22,8 @@ export const AdminOperations: React.FC = () => {
   const [baseFee, setBaseFee] = useState(settings?.base_shipping_fee || '15000');
   const [feePerKm, setFeePerKm] = useState(settings?.fee_per_km || '5000');
   const [maxKm, setMaxKm] = useState(settings?.max_delivery_km || '15');
+  const [freeShippingKm, setFreeShippingKm] = useState(settings?.free_shipping_km || '0');
+  const [shippingFormulaDesc, setShippingFormulaDesc] = useState(settings?.shipping_formula_desc || '');
 
   // Bank & Auto Payment Webhook Settings
   const [bankName, setBankName] = useState(settings?.bank_name || 'Techcombank');
@@ -56,6 +58,8 @@ export const AdminOperations: React.FC = () => {
       setBaseFee(settings.base_shipping_fee || '15000');
       setFeePerKm(settings.fee_per_km || '5000');
       setMaxKm(settings.max_delivery_km || '15');
+      setFreeShippingKm(settings.free_shipping_km || '0');
+      setShippingFormulaDesc(settings.shipping_formula_desc || '');
       setBankName(settings.bank_name || 'Techcombank');
       setBankAccount(settings.bank_account || '1903688899901');
       setBankOwner(settings.bank_owner || 'BAMI SAI GON');
@@ -70,9 +74,13 @@ export const AdminOperations: React.FC = () => {
     const bFee = parseInt(baseFee) || 15000;
     const fPerKm = parseInt(feePerKm) || 5000;
     const mKm = parseFloat(maxKm) || 15;
+    const freeKm = parseFloat(freeShippingKm) || 0;
 
     if (km > mKm) {
       return { fee: 0, outOfRange: true };
+    }
+    if (freeKm > 0 && km <= freeKm) {
+      return { fee: 0, outOfRange: false, isFree: true };
     }
     if (km <= bKm) {
       return { fee: bFee, outOfRange: false };
@@ -176,6 +184,8 @@ export const AdminOperations: React.FC = () => {
           base_shipping_fee: baseFee,
           fee_per_km: feePerKm,
           max_delivery_km: maxKm,
+          free_shipping_km: freeShippingKm,
+          shipping_formula_desc: shippingFormulaDesc,
           bank_name: bankName,
           bank_account: bankAccount,
           bank_owner: bankOwner,
@@ -393,16 +403,43 @@ export const AdminOperations: React.FC = () => {
           <span>Cấu hình Phí giao hàng tự động theo khoảng cách (km)</span>
         </h3>
 
-        <div className="p-4 rounded-2xl bg-[#FFF8E8] border border-amber-200 text-xs text-[#4A2115] space-y-1">
-          <p className="font-bold">💡 Công thức tính phí:</p>
-          <p>• Dưới hoặc bằng <strong>{baseKm} km</strong> đầu: Cố định <strong>{parseInt(baseFee).toLocaleString('vi-VN')}đ</strong></p>
-          <p>• Mỗi km tiếp theo: Cộng thêm <strong>{parseInt(feePerKm).toLocaleString('vi-VN')}đ/km</strong></p>
-          <p>• Vượt quá bán kính <strong>{maxKm} km</strong>: Hệ thống tự động báo vượt cự ly và yêu cầu nhận tại quán.</p>
+        {/* Editable formula description box */}
+        <div className="p-4 rounded-2xl bg-[#FFF8E8] border border-amber-200 text-xs text-[#4A2115] space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-sm">💡 Mô tả công thức tính phí (Nhập tay tùy chỉnh):</span>
+            <span className="text-[11px] text-gray-500">Hiển thị cho khách hàng & Admin</span>
+          </div>
+          <textarea
+            rows={3}
+            value={shippingFormulaDesc}
+            onChange={(e) => setShippingFormulaDesc(e.target.value)}
+            placeholder={`Ví dụ:\n• Dưới ${freeShippingKm || '0'} km: Miễn phí giao hàng\n• Cố định ${parseInt(baseFee || '0').toLocaleString('vi-VN')}đ cho ${baseKm || '0'} km đầu\n• Mỗi km tiếp theo cộng ${parseInt(feePerKm || '0').toLocaleString('vi-VN')}đ/km\n• Tối đa ${maxKm || '0'} km`}
+            className="w-full p-2.5 rounded-xl border border-amber-300 bg-white text-xs font-mono focus:outline-hidden focus:border-[#8C4A26]"
+          />
+          <p className="text-[11px] text-gray-500 italic">
+            * Để trống nếu muốn hệ thống tự động sinh mô tả dựa trên các thông số bên dưới.
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div>
-            <label className="block text-xs font-bold text-[#4A2115] mb-1">Số km đầu tiên (km) *</label>
+            <label className="block text-xs font-bold text-emerald-800 mb-1">
+              Miễn phí giao hàng dưới (km)
+            </label>
+            <input
+              type="number"
+              step="0.5"
+              min="0"
+              value={freeShippingKm}
+              onChange={(e) => setFreeShippingKm(e.target.value)}
+              placeholder="0 (không miễn phí)"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-emerald-300 bg-emerald-50/50 font-bold text-emerald-900"
+            />
+            <span className="text-[10px] text-gray-500 mt-0.5 block">0 = tắt miễn phí</span>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-[#4A2115] mb-1">Số km cơ sở (km) *</label>
             <input
               type="number"
               step="0.5"
@@ -412,10 +449,11 @@ export const AdminOperations: React.FC = () => {
               onChange={(e) => setBaseKm(e.target.value)}
               className="w-full px-3 py-2 text-xs rounded-xl border border-amber-200 font-bold"
             />
+            <span className="text-[10px] text-gray-500 mt-0.5 block">Khoảng cách tính phí đầu</span>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-[#4A2115] mb-1">Phí số km đầu (VNĐ) *</label>
+            <label className="block text-xs font-bold text-[#4A2115] mb-1">Phí km cơ sở (VNĐ) *</label>
             <input
               type="number"
               step="1000"
@@ -425,6 +463,7 @@ export const AdminOperations: React.FC = () => {
               onChange={(e) => setBaseFee(e.target.value)}
               className="w-full px-3 py-2 text-xs rounded-xl border border-amber-200 font-bold text-[#8C4A26]"
             />
+            <span className="text-[10px] text-gray-500 mt-0.5 block">Cước phí khởi điểm</span>
           </div>
 
           <div>
@@ -438,10 +477,11 @@ export const AdminOperations: React.FC = () => {
               onChange={(e) => setFeePerKm(e.target.value)}
               className="w-full px-3 py-2 text-xs rounded-xl border border-amber-200 font-bold text-[#8C4A26]"
             />
+            <span className="text-[10px] text-gray-500 mt-0.5 block">Cộng thêm mỗi km phụ</span>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-[#4A2115] mb-1">Bán kính giao tối đa (km) *</label>
+            <label className="block text-xs font-bold text-rose-700 mb-1">Bán kính giao tối đa (km) *</label>
             <input
               type="number"
               step="1"
@@ -451,6 +491,7 @@ export const AdminOperations: React.FC = () => {
               onChange={(e) => setMaxKm(e.target.value)}
               className="w-full px-3 py-2 text-xs rounded-xl border border-amber-200 font-bold text-rose-700"
             />
+            <span className="text-[10px] text-gray-500 mt-0.5 block">Cự ly xa nhất nhận giao</span>
           </div>
         </div>
 
@@ -484,6 +525,10 @@ export const AdminOperations: React.FC = () => {
               <span className="text-[10px] text-gray-500 uppercase font-bold block">Cước phí khách trả</span>
               {simResult.outOfRange ? (
                 <span className="text-xs font-bold text-rose-600">Vượt cự ly (Từ chối)</span>
+              ) : (simResult as any).isFree ? (
+                <span className="text-lg font-black text-emerald-600">
+                  0đ (Miễn phí giao)
+                </span>
               ) : (
                 <span className="text-lg font-black text-[#8C4A26]">
                   {simResult.fee.toLocaleString('vi-VN')}đ

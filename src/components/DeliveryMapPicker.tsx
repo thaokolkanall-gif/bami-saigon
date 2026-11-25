@@ -10,6 +10,8 @@ interface DeliveryMapPickerProps {
   baseKm: number;
   feePerKm: number;
   maxKm: number;
+  freeKm?: number;
+  formulaDesc?: string;
   initialLat?: number;
   initialLng?: number;
   onLocationChange: (data: {
@@ -42,6 +44,8 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
   baseKm,
   feePerKm,
   maxKm,
+  freeKm = 0,
+  formulaDesc = '',
   initialLat,
   initialLng,
   onLocationChange
@@ -67,7 +71,9 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
   const computeFee = (dist: number) => {
     const outOfRange = dist > maxKm;
     let fee = baseFee;
-    if (dist > baseKm) {
+    if (freeKm > 0 && dist <= freeKm) {
+      fee = 0;
+    } else if (dist > baseKm) {
       const extraKm = Math.ceil(dist - baseKm);
       fee = baseFee + extraKm * feePerKm;
     }
@@ -339,12 +345,20 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
             </span>
             <span className="text-gray-400">|</span>
             <span className="font-extrabold text-sm">
-              Phí giao hàng: <span className="text-[#8C4A26] font-black">{shippingFee.toLocaleString('vi-VN')}đ</span>
+              Phí giao hàng: {shippingFee === 0 ? (
+                <span className="text-emerald-700 font-black">Miễn phí giao hàng (0đ)</span>
+              ) : (
+                <span className="text-[#8C4A26] font-black">{shippingFee.toLocaleString('vi-VN')}đ</span>
+              )}
             </span>
           </div>
 
           <span className="text-[10px] text-gray-500 font-medium">
-            (Công thức: {baseKm} km đầu: {baseFee.toLocaleString('vi-VN')}đ + {feePerKm.toLocaleString('vi-VN')}đ/km tiếp theo)
+            {formulaDesc ? (
+              <span>(Công thức: {formulaDesc})</span>
+            ) : (
+              <span>(Công thức: {freeKm > 0 ? `Dưới ${freeKm} km: Miễn phí | ` : ''}{baseFee.toLocaleString('vi-VN')}đ cho {baseKm} km đầu + {feePerKm.toLocaleString('vi-VN')}đ/km tiếp theo)</span>
+            )}
           </span>
         </div>
 
