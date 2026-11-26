@@ -289,6 +289,43 @@ function initDatabase() {
   try { db.exec(`ALTER TABLE orders ADD COLUMN paid_at DATETIME;`); } catch(e){}
   try { db.exec(`ALTER TABLE orders ADD COLUMN transaction_ref TEXT;`); } catch(e){}
   try { db.exec(`ALTER TABLE orders ADD COLUMN is_prepaid INTEGER DEFAULT 0;`); } catch(e){}
+  try { db.exec(`ALTER TABLE orders ADD COLUMN promo_code TEXT;`); } catch(e){}
+  try { db.exec(`ALTER TABLE promotions ADD COLUMN once_per_customer INTEGER DEFAULT 1;`); } catch(e){}
+
+  // Customer Promotions Table (Voucher Wallet & 1-per-customer rule)
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS customer_promotions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER NOT NULL,
+        promotion_id INTEGER NOT NULL,
+        code TEXT NOT NULL,
+        status TEXT CHECK(status IN ('claimed', 'used', 'expired')) DEFAULT 'claimed',
+        claimed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        used_at DATETIME,
+        order_id INTEGER,
+        UNIQUE(customer_id, promotion_id)
+      );
+    `);
+  } catch(e){}
+
+  if (tursoClient) {
+    tursoClient.execute(`ALTER TABLE orders ADD COLUMN promo_code TEXT;`).catch(() => {});
+    tursoClient.execute(`ALTER TABLE promotions ADD COLUMN once_per_customer INTEGER DEFAULT 1;`).catch(() => {});
+    tursoClient.execute(`
+      CREATE TABLE IF NOT EXISTS customer_promotions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER NOT NULL,
+        promotion_id INTEGER NOT NULL,
+        code TEXT NOT NULL,
+        status TEXT CHECK(status IN ('claimed', 'used', 'expired')) DEFAULT 'claimed',
+        claimed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        used_at DATETIME,
+        order_id INTEGER,
+        UNIQUE(customer_id, promotion_id)
+      );
+    `).catch(() => {});
+  }
 
   // 1. Seed default data if categories empty
   seedDefaultData();

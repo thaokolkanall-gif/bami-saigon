@@ -1,6 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
-const { db } = require('../db');
+const { db, syncWriteToCloud } = require('../db');
 const { authenticateToken } = require('../middleware/auth');
 const { rateLimiter } = require('../middleware/rate-limit');
 
@@ -226,6 +226,7 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
   // Calculate Promotion Discount
   let discountAmount = 0;
   let validPromoId = null;
+  let appliedPromoCode = null;
   if (promo_code) {
     const promo = db.prepare('SELECT * FROM promotions WHERE UPPER(code) = UPPER(?) AND is_active = 1').get(promo_code.trim());
     if (promo) {
@@ -233,6 +234,20 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
       const isDateValid = (!promo.start_date || new Date(promo.start_date) <= now) && (!promo.end_date || new Date(promo.end_date) >= now);
       const isUsesValid = !promo.max_uses || promo.used_count < promo.max_uses;
       const isMinValid = !promo.min_order_value || subtotal >= promo.min_order_value;
+
+      // Check single use per customer
+      let isCustomerAlreadyUsed = false;
+      if (customer_id) {
+        const usedClaim = db.prepare('SELECT id FROM customer_promotions WHERE customer_id = ? AND promotion_id = ? AND status = "used"').get(customer_id, promo.id);
+        const orderUsed = db.prepare('SELECT id FROM orders WHERE customer_id = ? AND UPPER(promo_code) = UPPER(?) AND status != "cancelled"').get(customer_id, promo.code);
+        if (usedClaim || orderUsed) {
+          isCustomerAlreadyUsed = true;
+        }
+      }
+
+      if (isCustomerAlreadyUsed) {
+        return res.status(400).json({ error: `Bạn đã sử dụng mã ưu đãi ${promo.code} trước đó rồi. Mỗi khách hàng chỉ được dùng 1 lần duy nhất.` });
+      }
 
       if (isDateValid && isUsesValid && isMinValid) {
         if (promo.discount_type === 'percent') {
@@ -245,6 +260,7 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
         }
         discountAmount = Math.min(discountAmount, subtotal);
         validPromoId = promo.id;
+        appliedPromoCode = promo.code;
       }
     }
   }
@@ -263,8 +279,8 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
         order_code, tracking_token, customer_name, customer_phone, order_type,
         address, address_note, distance_km, customer_lat, customer_lng, pickup_time, order_note,
         payment_method, payment_status, status, subtotal, discount_amount,
-        delivery_fee, total_amount, idempotency_key, customer_id, is_prepaid
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid', ?, ?, ?, ?, ?, ?, ?, ?)
+        delivery_fee, total_amount, idempotency_key, customer_id, is_prepaid, promo_code
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid', ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       orderCode,
       trackingToken,
@@ -286,7 +302,8 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
       totalAmount,
       idempotency_key || null,
       customer_id || null,
-      (payment_method === 'transfer' || is_prepaid) ? 1 : 0
+      (payment_method === 'transfer' || is_prepaid) ? 1 : 0,
+      appliedPromoCode || null
     );
 
     const orderId = orderResult.lastInsertRowid;
@@ -316,9 +333,21 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
       VALUES (?, NULL, ?, ?, 'Khách hàng')
     `).run(orderId, initialStatus, initialStatus === 'pending_payment' ? 'Khách tạo đơn - Chờ thanh toán chuyển khoản trước' : 'Khách hàng tạo đơn trực tuyến');
 
-    // Update promo usage
+    // Update promo usage & 1-time-per-customer record
     if (validPromoId) {
       db.prepare('UPDATE promotions SET used_count = used_count + 1 WHERE id = ?').run(validPromoId);
+      syncWriteToCloud('UPDATE promotions SET used_count = used_count + 1 WHERE id = ?', [validPromoId]);
+
+      if (customer_id) {
+        const existingClaim = db.prepare('SELECT id FROM customer_promotions WHERE customer_id = ? AND promotion_id = ?').get(customer_id, validPromoId);
+        if (existingClaim) {
+          db.prepare('UPDATE customer_promotions SET status = "used", used_at = CURRENT_TIMESTAMP, order_id = ? WHERE id = ?').run(orderId, existingClaim.id);
+          syncWriteToCloud('UPDATE customer_promotions SET status = ?, used_at = CURRENT_TIMESTAMP, order_id = ? WHERE id = ?', ['used', orderId, existingClaim.id]);
+        } else {
+          db.prepare('INSERT INTO customer_promotions (customer_id, promotion_id, code, status, used_at, order_id) VALUES (?, ?, ?, "used", CURRENT_TIMESTAMP, ?)').run(customer_id, validPromoId, appliedPromoCode, orderId);
+          syncWriteToCloud('INSERT INTO customer_promotions (customer_id, promotion_id, code, status, used_at, order_id) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)', [customer_id, validPromoId, appliedPromoCode, 'used', orderId]);
+        }
+      }
     }
 
     // Create admin notification (only notify immediately for COD orders; prepay orders notify after payment)

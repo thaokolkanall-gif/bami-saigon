@@ -55,6 +55,23 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
   const [voucherInput, setVoucherInput] = useState(promoCode);
   const [voucherError, setVoucherError] = useState('');
   const [voucherSuccess, setVoucherSuccess] = useState(promoCode ? 'Đã áp dụng mã' : '');
+  const [availableVouchers, setAvailableVouchers] = useState<any[]>([]);
+
+  useEffect(() => {
+    const custToken = localStorage.getItem('bami_customer_token');
+    const headers: Record<string, string> = {};
+    if (custToken) headers['Authorization'] = `Bearer ${custToken}`;
+
+    fetch('/api/promotions', { headers })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          // Available vouchers for this customer
+          setAvailableVouchers(data.filter(p => p.claim_status !== 'used'));
+        }
+      })
+      .catch(() => {});
+  }, [customer]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -72,14 +89,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
   const finalTotal = Math.max(0, subtotal - discountAmount + actualDeliveryFee);
 
   // Apply Voucher
-  const handleApplyVoucher = async () => {
-    if (!voucherInput.trim()) return;
+  const handleApplyVoucher = async (customCode?: string) => {
+    const targetCode = (customCode || voucherInput).trim();
+    if (!targetCode) return;
     setVoucherError('');
     try {
       const res = await fetch('/api/promotions/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: voucherInput.trim(), subtotal })
+        body: JSON.stringify({ code: targetCode, subtotal, customer_id: customer?.id })
       });
       const data = await res.json();
       if (!res.ok) {
@@ -614,10 +632,44 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
             </div>
 
             {/* Voucher input */}
-            <div className="pt-2">
-              <label className="block text-xs font-bold text-[#4A2115] mb-1">
-                Mã giảm giá / Voucher
-              </label>
+            <div className="pt-2 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-[#4A2115]">
+                  Mã giảm giá / Voucher (Mỗi khách 1 lần)
+                </label>
+              </div>
+
+              {/* Danh sách voucher chờ sử dụng */}
+              {availableVouchers.length > 0 && (
+                <div className="p-2.5 bg-amber-50/80 border border-amber-200/90 rounded-2xl space-y-1.5">
+                  <span className="text-[11px] font-black text-[#8C4A26] block">
+                    ⚡ Voucher chờ bạn sử dụng (Chạm để áp dụng ngay):
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableVouchers.map(v => (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => {
+                          setVoucherInput(v.code);
+                          handleApplyVoucher(v.code);
+                        }}
+                        className={`px-2.5 py-1 rounded-xl text-left text-[11px] font-medium border transition-all cursor-pointer ${
+                          voucherInput === v.code
+                            ? 'bg-[#8C4A26] text-white border-[#8C4A26] shadow-xs'
+                            : 'bg-white hover:bg-amber-100 text-[#4A2115] border-amber-200'
+                        }`}
+                      >
+                        <span className="font-mono font-black">{v.code}</span>
+                        <span className="ml-1 opacity-90">
+                          {v.discount_type === 'percent' ? `-${v.discount_value}%` : `-${v.discount_value.toLocaleString('vi-VN')}đ`}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -628,7 +680,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
                 />
                 <button
                   type="button"
-                  onClick={handleApplyVoucher}
+                  onClick={() => handleApplyVoucher()}
                   className="px-4 py-2 bg-[#F5BD42] hover:bg-[#E5AC32] text-[#4A2115] font-black rounded-xl text-xs cursor-pointer"
                 >
                   Áp dụng

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Sparkles, Clock, Phone, MapPin, ShieldCheck, Tag, ShoppingBag, Navigation, Copy, Check, Gift } from 'lucide-react';
+import { ArrowRight, Sparkles, Clock, Phone, MapPin, ShieldCheck, Tag, ShoppingBag, Navigation, Copy, Check, Gift, Zap } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
+import { useCustomer } from '../context/CustomerContext';
+import { useCart } from '../context/CartContext';
 import { Product, Combo, Promotion, Topping } from '../types';
 import { DishDetailModal } from '../components/DishDetailModal';
 
@@ -10,17 +12,41 @@ interface HomePageProps {
 
 export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const { settings } = useStore();
+  const { customer, openAuthModal } = useCustomer();
+  const { setPromoCode } = useCart();
+
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [combos, setCombos] = useState<Combo[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [toppings, setToppings] = useState<Topping[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isClaimingId, setIsClaimingId] = useState<number | null>(null);
 
-  const handleCopyVoucher = (code: string) => {
-    navigator.clipboard.writeText(code);
-    setCopiedCode(code);
-    setTimeout(() => setCopiedCode(null), 2000);
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const fetchPromotions = () => {
+    const custToken = localStorage.getItem('bami_customer_token');
+    const headers: Record<string, string> = {};
+    if (custToken) headers['Authorization'] = `Bearer ${custToken}`;
+
+    fetch('/api/promotions', { headers })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          const now = new Date();
+          const active = data.filter(p => 
+            p.is_active === 1 && 
+            (!p.start_date || new Date(p.start_date) <= now) &&
+            (!p.end_date || new Date(p.end_date) >= now)
+          );
+          setPromotions(active);
+        }
+      })
+      .catch(() => {});
   };
 
   useEffect(() => {
@@ -39,21 +65,80 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       })
       .catch(err => console.error('Error fetching home menu:', err));
 
-    fetch('/api/promotions')
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          const now = new Date();
-          const active = data.filter(p => 
-            p.is_active === 1 && 
-            (!p.start_date || new Date(p.start_date) <= now) &&
-            (!p.end_date || new Date(p.end_date) >= now)
-          );
-          setPromotions(active);
-        }
-      })
-      .catch(() => {});
-  }, []);
+    fetchPromotions();
+  }, [customer]);
+
+  // Handle claiming voucher (1 time per customer rule)
+  const handleClaimVoucher = async (promo: Promotion) => {
+    if (!customer) {
+      showToast('Quý khách vui lòng đăng nhập để nhận voucher vào ví ưu đãi (mỗi khách nhận 1 lần)');
+      openAuthModal('login');
+      return;
+    }
+
+    setIsClaimingId(promo.id);
+    const token = localStorage.getItem('bami_customer_token');
+
+    try {
+      const res = await fetch('/api/promotions/claim', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ promo_id: promo.id })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`🎉 Nhận thành công mã ${promo.code}! Voucher đang chờ bạn sử dụng.`);
+        fetchPromotions();
+      } else {
+        showToast(data.error || 'Không thể nhận mã lúc này');
+      }
+    } catch {
+      showToast('Lỗi kết nối khi nhận mã');
+    } finally {
+      setIsClaimingId(null);
+    }
+  };
+
+  // Handle using voucher immediately
+  const handleUseVoucher = (promo: Promotion) => {
+    navigator.clipboard.writeText(promo.code);
+    setPromoCode(promo.code);
+    showToast(`Đã chọn mã ${promo.code}! Đang chuyển đến thực đơn...`);
+    setTimeout(() => {
+      onNavigate('menu');
+      window.scrollTo({ top: 300, behavior: 'smooth' });
+    }, 600);
+  };
+
+  // Format expiration countdown / label
+  const formatExpiry = (endDateStr: string | null | undefined) => {
+    if (!endDateStr) return null;
+    const end = new Date(endDateStr);
+    const now = new Date();
+    const diffMs = end.getTime() - now.getTime();
+    if (diffMs <= 0) return { text: 'Đã hết hạn', isUrgent: false };
+
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffHours < 24) {
+      const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      return { text: `Còn ${diffHours}h ${mins}p`, isUrgent: true };
+    } else if (diffDays <= 3) {
+      return { text: `Còn ${diffDays} ngày`, isUrgent: true };
+    } else {
+      const d = end.getDate().toString().padStart(2, '0');
+      const m = (end.getMonth() + 1).toString().padStart(2, '0');
+      const y = end.getFullYear();
+      const h = end.getHours().toString().padStart(2, '0');
+      const min = end.getMinutes().toString().padStart(2, '0');
+      return { text: `HSD: ${h}:${min} ${d}/${m}/${y}`, isUrgent: false };
+    }
+  };
 
   const heroImage = settings?.hero_image || '/bami-saigon-store.jpg';
   const heroTitle = settings?.hero_title || 'Bánh Mì Sài Gòn Giòn Rụm, Đậm Đà Hương Vị Xưa';
@@ -62,7 +147,15 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   return (
     <div className="space-y-16 sm:space-y-24 pb-16">
       
-      {/* 🌟 VOUCHER RIBBON AT THE VERY TOP (Thu hút khách hàng nhận voucher ngay khi vào trang) */}
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#4A2115] text-[#FFF8E8] px-4 py-3 rounded-2xl shadow-2xl border border-[#F5BD42] flex items-center gap-2 text-xs font-bold animate-bounce">
+          <Sparkles className="w-4 h-4 text-[#F5BD42]" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* 🌟 VOUCHER RIBBON AT THE VERY TOP: QUY TẮC MỖI KHÁCH 1 LẦN, THỜI HẠN & VOUCHER CHỜ SỬ DỤNG */}
       {promotions.length > 0 && (
         <section className="bg-gradient-to-r from-[#8C4A26] via-[#B85C2A] to-[#8C4A26] text-white py-2.5 px-4 shadow-md sticky top-20 z-30">
           <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
@@ -70,34 +163,91 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               <span className="w-6 h-6 rounded-lg bg-[#F5BD42] text-[#4A2115] flex items-center justify-center text-sm shadow-xs animate-bounce">
                 🎁
               </span>
-              <span className="uppercase tracking-wider text-[#F5BD42] font-black">Ưu đãi Voucher hôm nay:</span>
+              <div className="flex flex-col">
+                <span className="uppercase tracking-wider text-[#F5BD42] font-black text-xs leading-none">Ưu đãi Voucher hôm nay:</span>
+                <span className="text-[10px] text-amber-200/90 font-medium leading-tight">Mỗi khách chỉ nhận 1 lần duy nhất</span>
+              </div>
             </div>
 
             <div className="flex items-center gap-3 overflow-x-auto w-full md:w-auto py-1 scrollbar-none">
-              {promotions.map(promo => (
-                <div 
-                  key={promo.id} 
-                  className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/25 rounded-xl px-3 py-1.5 transition-all shrink-0"
-                >
-                  <div className="text-left">
-                    <span className="font-mono font-black text-xs text-[#F5BD42] tracking-wider block">
-                      {promo.code}
-                    </span>
-                    <span className="text-[10px] text-white/90 truncate block max-w-[160px]">
-                      {promo.discount_type === 'percent' ? `Giảm ${promo.discount_value}%` : `Giảm ${promo.discount_value.toLocaleString('vi-VN')}đ`} (Đơn {promo.min_order_value.toLocaleString('vi-VN')}đ)
-                    </span>
-                  </div>
+              {promotions.map(promo => {
+                const expiry = formatExpiry(promo.end_date);
+                const isClaimed = promo.claim_status === 'claimed';
+                const isUsed = promo.claim_status === 'used';
 
-                  <button
-                    onClick={() => handleCopyVoucher(promo.code)}
-                    className="p-1.5 rounded-lg bg-[#F5BD42] hover:bg-[#E5AC32] text-[#4A2115] font-black text-[10px] flex items-center gap-1 shadow-xs cursor-pointer transition-transform active:scale-95"
-                    title="Sao chép mã"
+                return (
+                  <div 
+                    key={promo.id} 
+                    className={`inline-flex items-center gap-2.5 border rounded-2xl px-3.5 py-1.5 transition-all shrink-0 ${
+                      isClaimed 
+                        ? 'bg-amber-400/20 border-[#F5BD42] shadow-sm' 
+                        : isUsed 
+                          ? 'bg-white/5 border-white/10 opacity-75' 
+                          : 'bg-white/10 hover:bg-white/15 border-white/20'
+                    }`}
                   >
-                    {copiedCode === promo.code ? <Check className="w-3 h-3 text-emerald-800" /> : <Copy className="w-3 h-3" />}
-                    <span>{copiedCode === promo.code ? 'Đã lưu' : 'Nhận mã'}</span>
-                  </button>
-                </div>
-              ))}
+                    <div className="text-left">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono font-black text-xs text-[#F5BD42] tracking-wider block">
+                          {promo.code}
+                        </span>
+                        
+                        {/* Hạn sử dụng theo cài đặt */}
+                        {expiry && (
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                            expiry.isUrgent 
+                              ? 'bg-amber-300 text-[#4A2115] animate-pulse' 
+                              : 'bg-black/20 text-white/90'
+                          }`}>
+                            {expiry.text}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-white/95 truncate block max-w-[170px]">
+                          {promo.discount_type === 'percent' ? `Giảm ${promo.discount_value}%` : `Giảm ${promo.discount_value.toLocaleString('vi-VN')}đ`} (Đơn {promo.min_order_value.toLocaleString('vi-VN')}đ)
+                        </span>
+                      </div>
+
+                      {/* Trạng thái: Voucher chờ bạn sử dụng */}
+                      {isClaimed && (
+                        <div className="flex items-center gap-1 text-[10px] font-black text-[#F5BD42] mt-0.5">
+                          <Zap className="w-3 h-3 fill-[#F5BD42]" />
+                          <span>Voucher chờ bạn sử dụng</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action buttons */}
+                    {isUsed ? (
+                      <span className="px-2.5 py-1 rounded-lg bg-white/10 text-white/60 font-semibold text-[10px] flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        <span>Đã sử dụng</span>
+                      </span>
+                    ) : isClaimed ? (
+                      <button
+                        onClick={() => handleUseVoucher(promo)}
+                        className="px-3 py-1.5 rounded-xl bg-[#F5BD42] hover:bg-[#E5AC32] text-[#4A2115] font-black text-[10px] flex items-center gap-1 shadow-xs cursor-pointer transition-transform active:scale-95 animate-pulse"
+                        title="Dùng ngay mã giảm giá này"
+                      >
+                        <span>Dùng ngay</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    ) : (
+                      <button
+                        disabled={isClaimingId === promo.id}
+                        onClick={() => handleClaimVoucher(promo)}
+                        className="px-3 py-1.5 rounded-xl bg-white/20 hover:bg-[#F5BD42] hover:text-[#4A2115] text-white font-black text-[10px] flex items-center gap-1 border border-white/30 shadow-xs cursor-pointer transition-all active:scale-95"
+                        title="Nhận voucher vào tài khoản của bạn (Mỗi khách 1 lần)"
+                      >
+                        <Gift className="w-3 h-3" />
+                        <span>{isClaimingId === promo.id ? 'Đang nhận...' : 'Nhận voucher'}</span>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <button

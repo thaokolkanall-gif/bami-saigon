@@ -93,6 +93,10 @@ export interface Promotion {
   start_date: string | null;
   end_date: string | null;
   is_active: number;
+  once_per_customer?: number;
+  is_claimed?: boolean;
+  is_used?: boolean;
+  claim_status?: 'not_claimed' | 'claimed' | 'used';
 }
 
 export interface DeliveryZone {
