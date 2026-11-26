@@ -61,9 +61,29 @@ router.post('/validate', (req, res) => {
   });
 });
 
-// Admin: List all promotions
-router.get('/', authenticateToken, (req, res) => {
-  const promos = db.prepare('SELECT * FROM promotions ORDER BY id DESC').all();
+// Get promotions:
+// - If Admin/Staff token: return all promotions for admin management
+// - If Public / Customer: return active promotions
+router.get('/', (req, res) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (token) {
+    const { JWT_SECRET } = require('../middleware/auth');
+    const jwt = require('jsonwebtoken');
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      if (decoded && (decoded.role === 'owner' || decoded.role === 'staff' || decoded.role === 'admin')) {
+        const promos = db.prepare('SELECT * FROM promotions ORDER BY id DESC').all();
+        return res.json(promos);
+      }
+    } catch (e) {
+      // not admin or invalid token, fall through to public active promos
+    }
+  }
+
+  // Public: return active promotions
+  const promos = db.prepare('SELECT * FROM promotions WHERE is_active = 1 ORDER BY id DESC').all();
   res.json(promos);
 });
 
