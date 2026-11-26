@@ -1,5 +1,5 @@
 const express = require('express');
-const { db, tursoClient } = require('../db');
+const { db, tursoClient, syncWriteToCloud } = require('../db');
 const { authenticateToken, requireOwner } = require('../middleware/auth');
 
 const router = express.Router();
@@ -113,6 +113,12 @@ router.put('/settings', authenticateToken, requireOwner, (req, res) => {
   });
 
   transaction(updates);
+
+  // Sync to Turso Cloud
+  for (const [key, value] of Object.entries(updates)) {
+    const valStr = typeof value === 'object' ? JSON.stringify(value) : String(value ?? '');
+    syncWriteToCloud('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP', [key, valStr]);
+  }
 
   // Log to audit log
   db.prepare('INSERT INTO audit_logs (username, action, details) VALUES (?, ?, ?)')

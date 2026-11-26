@@ -39,7 +39,7 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate, onOpenA
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1">
               <Clock className="w-3.5 h-3.5 text-[#F5BD42]" />
-              <span className="hidden sm:inline">Giờ hoạt động:</span> 06:00 - 22:00 hàng ngày
+              <span className="hidden sm:inline">Giờ hoạt động:</span> {settings?.open_time || '06:00'} - {settings?.close_time || '22:00'} hàng ngày
             </span>
             <span className="hidden md:inline text-amber-300">|</span>
             <span className="hidden md:flex items-center gap-1">

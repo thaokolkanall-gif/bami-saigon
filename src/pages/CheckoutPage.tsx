@@ -84,8 +84,13 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
   } | null>(null);
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
 
-  // Shipping fee logic: 0 for pickup, calculated by distance for delivery
-  const actualDeliveryFee = orderType === 'delivery' ? deliveryFee : 0;
+  const isBankTransferAllowed = settings?.allow_bank_transfer !== '0';
+
+  useEffect(() => {
+    if (!isBankTransferAllowed && paymentMethod === 'transfer') {
+      setPaymentMethod('cod');
+    }
+  }, [isBankTransferAllowed, paymentMethod]);
   const finalTotal = Math.max(0, subtotal - discountAmount + actualDeliveryFee);
 
   // Apply Voucher
@@ -546,53 +551,55 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
                 </div>
               </label>
 
-              <label 
-                className={`flex items-start gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                  paymentMethod === 'transfer' ? 'border-[#8C4A26] bg-[#FFF8E8]' : 'border-amber-200/80 hover:bg-gray-50'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="payment"
-                  checked={paymentMethod === 'transfer'}
-                  onChange={() => setPaymentMethod('transfer')}
-                  className="mt-1 text-[#8C4A26] focus:ring-[#8C4A26]"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="w-4 h-4 text-[#8C4A26]" />
-                    <span className="font-bold text-sm text-[#4A2115]">
-                      Chuyển khoản VietQR (Thanh toán trước — Shipper không thu tiền)
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Quét mã QR qua ứng dụng ngân hàng. Hệ thống tự động nhận diện đã thanh toán, shipper sẽ giao bánh mà không thu tiền mặt.
-                  </p>
+              {isBankTransferAllowed && (
+                <label 
+                  className={`flex items-start gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                    paymentMethod === 'transfer' ? 'border-[#8C4A26] bg-[#FFF8E8]' : 'border-amber-200/80 hover:bg-gray-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="payment"
+                    checked={paymentMethod === 'transfer'}
+                    onChange={() => setPaymentMethod('transfer')}
+                    className="mt-1 text-[#8C4A26] focus:ring-[#8C4A26]"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="w-4 h-4 text-[#8C4A26]" />
+                      <span className="font-bold text-sm text-[#4A2115]">
+                        Chuyển khoản VietQR (Thanh toán trước — Shipper không thu tiền)
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Quét mã QR qua ứng dụng ngân hàng. Hệ thống tự động nhận diện đã thanh toán, shipper sẽ giao bánh mà không thu tiền mặt.
+                    </p>
 
-                  {/* VietQR Dynamic Preview */}
-                  {paymentMethod === 'transfer' && (
-                    <div className="mt-4 p-4 rounded-xl bg-white border border-amber-300 space-y-3">
-                      <div className="flex flex-col sm:flex-row items-center gap-4">
-                        <img
-                          src={vietqrUrl}
-                          alt="VietQR Chuyển khoản Bami Sài Gòn"
-                          className="w-36 h-36 rounded-lg object-contain border border-gray-200"
-                        />
-                        <div className="text-xs space-y-1 text-gray-700">
-                          <p><strong>Ngân hàng:</strong> {bankName}</p>
-                          <p><strong>Số tài khoản:</strong> <span className="font-mono font-bold text-[#8C4A26]">{bankAccount}</span></p>
-                          <p><strong>Chủ tài khoản:</strong> {bankOwner}</p>
-                          <p><strong>Số tiền:</strong> {finalTotal.toLocaleString('vi-VN')}đ</p>
-                          <p><strong>Nội dung:</strong> BAMI {customerPhone || 'SĐT'}</p>
+                    {/* VietQR Dynamic Preview */}
+                    {paymentMethod === 'transfer' && (
+                      <div className="mt-4 p-4 rounded-xl bg-white border border-amber-300 space-y-3">
+                        <div className="flex flex-col sm:flex-row items-center gap-4">
+                          <img
+                            src={vietqrUrl}
+                            alt="VietQR Chuyển khoản Bami Sài Gòn"
+                            className="w-36 h-36 rounded-lg object-contain border border-gray-200"
+                          />
+                          <div className="text-xs space-y-1 text-gray-700">
+                            <p><strong>Ngân hàng:</strong> {bankName}</p>
+                            <p><strong>Số tài khoản:</strong> <span className="font-mono font-bold text-[#8C4A26]">{bankAccount}</span></p>
+                            <p><strong>Chủ tài khoản:</strong> {bankOwner}</p>
+                            <p><strong>Số tiền:</strong> {finalTotal.toLocaleString('vi-VN')}đ</p>
+                            <p><strong>Nội dung:</strong> BAMI {customerPhone || 'SĐT'}</p>
+                          </div>
+                        </div>
+                        <div className="text-[11px] text-amber-800 bg-amber-50 p-2 rounded-lg">
+                          ⚠️ Lưu ý: Quý khách có thể quét mã chuyển tiền ngay hoặc sau khi gửi đơn. Quán sẽ kiểm tra tài khoản trước khi làm bánh.
                         </div>
                       </div>
-                      <div className="text-[11px] text-amber-800 bg-amber-50 p-2 rounded-lg">
-                        ⚠️ Lưu ý: Quý khách có thể quét mã chuyển tiền ngay hoặc sau khi gửi đơn. Quán sẽ kiểm tra tài khoản trước khi làm bánh.
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </label>
+                    )}
+                  </div>
+                </label>
+              )}
             </div>
           </div>
 

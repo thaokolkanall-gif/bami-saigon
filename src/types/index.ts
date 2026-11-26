@@ -14,10 +14,13 @@ export interface StoreSettings {
   facebook: string;
   map_embed: string;
   opening_hours: Record<string, { open: string; close: string; isOpen: boolean }> | string;
+  open_time?: string;
+  close_time?: string;
   is_online_ordering_enabled: string;
   is_paused: string;
   allow_pickup: string;
   allow_delivery: string;
+  allow_bank_transfer?: string;
   prep_time_min: string;
   prep_time_max: string;
   bank_name: string;

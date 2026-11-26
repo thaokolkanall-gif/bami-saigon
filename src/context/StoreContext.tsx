@@ -42,7 +42,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     fetchSettings();
   }, []);
 
-  // Check if store is open right now based on opening_hours
+  // Check if store is open right now based on opening_hours / open_time
   const checkIsOpenNow = (): boolean => {
     if (!settings) return true;
     if (settings.is_online_ordering_enabled === '0' || settings.is_paused === '1') {
@@ -50,6 +50,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     try {
+      const now = new Date();
+      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+      if (settings.open_time && settings.close_time) {
+        return currentTime >= settings.open_time && currentTime <= settings.close_time;
+      }
+
       const hours = typeof settings.opening_hours === 'string' 
         ? JSON.parse(settings.opening_hours) 
         : settings.opening_hours;
@@ -57,13 +64,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (!hours) return true;
 
       const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-      const now = new Date();
       const currentDay = days[now.getDay()];
       const daySchedule = hours[currentDay];
 
       if (!daySchedule || !daySchedule.isOpen) return false;
 
-      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
       return currentTime >= daySchedule.open && currentTime <= daySchedule.close;
     } catch (e) {
       return true;

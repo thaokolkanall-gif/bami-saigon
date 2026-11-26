@@ -14,6 +14,47 @@ export const AdminOperations: React.FC = () => {
   const [prepTimeMin, setPrepTimeMin] = useState(settings?.prep_time_min || '10');
   const [prepTimeMax, setPrepTimeMax] = useState(settings?.prep_time_max || '20');
 
+  // Opening & closing times
+  const getInitialOpenTime = () => {
+    if (settings?.open_time) return settings.open_time;
+    try {
+      const h = typeof settings?.opening_hours === 'string' ? JSON.parse(settings.opening_hours) : settings?.opening_hours;
+      if (h?.monday?.open) return h.monday.open;
+    } catch {}
+    return '06:00';
+  };
+
+  const getInitialCloseTime = () => {
+    if (settings?.close_time) return settings.close_time;
+    try {
+      const h = typeof settings?.opening_hours === 'string' ? JSON.parse(settings.opening_hours) : settings?.opening_hours;
+      if (h?.monday?.close) return h.monday.close;
+    } catch {}
+    return '22:00';
+  };
+
+  const [openTime, setOpenTime] = useState(getInitialOpenTime);
+  const [closeTime, setCloseTime] = useState(getInitialCloseTime);
+
+  // Bank transfer toggle
+  const [allowBankTransfer, setAllowBankTransfer] = useState(settings?.allow_bank_transfer !== '0');
+
+  // Real-time check for open preview
+  const isStoreOpenRealtime = (() => {
+    const now = new Date();
+    const cur = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    return cur >= openTime && cur <= closeTime;
+  })();
+
+  const generateOpeningHoursJson = (open: string, close: string) => {
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const schedule: Record<string, any> = {};
+    days.forEach(d => {
+      schedule[d] = { open, close, isOpen: true };
+    });
+    return JSON.stringify(schedule);
+  };
+
   // GPS & Distance Shipping Settings
   const [storeLat, setStoreLat] = useState(settings?.store_lat || '10.771971');
   const [storeLng, setStoreLng] = useState(settings?.store_lng || '106.692237');
@@ -104,6 +145,9 @@ export const AdminOperations: React.FC = () => {
       setMinOrderValue(settings.min_order_value || '25000');
       setPrepTimeMin(settings.prep_time_min || '10');
       setPrepTimeMax(settings.prep_time_max || '20');
+      if (settings.open_time) setOpenTime(settings.open_time);
+      if (settings.close_time) setCloseTime(settings.close_time);
+      setAllowBankTransfer(settings.allow_bank_transfer !== '0');
       setStoreLat(settings.store_lat || '10.771971');
       setStoreLng(settings.store_lng || '106.692237');
       setGoogleMapUrl(settings.google_map_url || '');
@@ -227,6 +271,10 @@ export const AdminOperations: React.FC = () => {
           is_paused: isPaused ? '1' : '0',
           allow_pickup: allowPickup ? '1' : '0',
           allow_delivery: allowDelivery ? '1' : '0',
+          allow_bank_transfer: allowBankTransfer ? '1' : '0',
+          open_time: openTime,
+          close_time: closeTime,
+          opening_hours: generateOpeningHoursJson(openTime, closeTime),
           min_order_value: minOrderValue,
           prep_time_min: prepTimeMin,
           prep_time_max: prepTimeMax,
@@ -372,6 +420,59 @@ export const AdminOperations: React.FC = () => {
               onChange={(e) => setPrepTimeMax(e.target.value)}
               className="w-full px-3 py-2 text-xs rounded-xl border border-amber-200 bg-amber-50/20"
             />
+          </div>
+        </div>
+
+        {/* Khung điều chỉnh Thời gian mở và đóng cửa quán */}
+        <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200 space-y-3 mt-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/60 pb-2">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[#8C4A26]" />
+              <span className="font-bold text-xs uppercase tracking-wider text-[#4A2115]">
+                Thời gian mở & đóng cửa nhận đơn hàng ngày
+              </span>
+            </div>
+            <div className="inline-flex items-center">
+              {isStoreOpenRealtime ? (
+                <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/90 px-3 py-1 rounded-full flex items-center gap-1.5 border border-emerald-300">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Hiện tại: Đang trong giờ mở cửa ({openTime} - {closeTime})
+                </span>
+              ) : (
+                <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-3 py-1 rounded-full flex items-center gap-1.5 border border-amber-300">
+                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                  Hiện tại: Đang ngoài giờ phục vụ ({openTime} - {closeTime})
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+            <div>
+              <label className="block text-xs font-bold text-[#4A2115] mb-1">
+                Giờ mở cửa (Hàng ngày)
+              </label>
+              <input
+                type="time"
+                value={openTime}
+                onChange={(e) => setOpenTime(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-amber-300 bg-white font-mono font-bold text-[#4A2115]"
+              />
+              <span className="text-[10px] text-gray-500 mt-0.5 block">Thời điểm bắt đầu nhận đơn và mở bếp phục vụ</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[#4A2115] mb-1">
+                Giờ đóng cửa (Hàng ngày)
+              </label>
+              <input
+                type="time"
+                value={closeTime}
+                onChange={(e) => setCloseTime(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-amber-300 bg-white font-mono font-bold text-[#4A2115]"
+              />
+              <span className="text-[10px] text-gray-500 mt-0.5 block">Thời điểm kết thúc nhận đơn hàng trên website trong ngày</span>
+            </div>
           </div>
         </div>
       </div>
@@ -605,6 +706,35 @@ export const AdminOperations: React.FC = () => {
             Mỗi khi khách hàng quét mã VietQR chuyển tiền vào tài khoản ngân hàng của quán, dịch vụ đối soát (như <strong>SePay</strong> hoặc <strong>Casso</strong>) sẽ tự động gửi thông báo về Webhook này. Hệ thống sẽ so khớp mã đơn hàng (ví dụ: <code>BM8924</code>) và tự động đổi trạng thái đơn sang <strong>"Đã thanh toán trước"</strong> ngay tức thì!
           </p>
         </div>
+
+        {/* Bật / Tắt nhận chuyển khoản ngân hàng (VietQR) */}
+        <label className={`flex items-center justify-between p-4 rounded-2xl border cursor-pointer transition-colors ${
+          allowBankTransfer ? 'border-amber-300 bg-amber-50/50' : 'border-gray-200 bg-gray-50'
+        }`}>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-sm text-[#4A2115]">
+                Bật nhận thanh toán chuyển khoản ngân hàng (VietQR)
+              </span>
+              <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                allowBankTransfer ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-gray-200 text-gray-600 border border-gray-300'
+              }`}>
+                {allowBankTransfer ? 'Đang bật' : 'Đang tắt'}
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {allowBankTransfer 
+                ? 'Khách hàng có thể quét mã VietQR tự động khi đặt đơn. Khi nhận được tiền, Webhook sẽ tự duyệt đơn.' 
+                : 'Đang tắt: Khách hàng chỉ có thể thanh toán tiền mặt (COD). Tùy chọn chuyển khoản VietQR trên trang đặt hàng sẽ bị khóa/ẩn.'}
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            checked={allowBankTransfer}
+            onChange={(e) => setAllowBankTransfer(e.target.checked)}
+            className="w-5 h-5 text-[#8C4A26] rounded-md cursor-pointer shrink-0 ml-4"
+          />
+        </label>
 
         {/* Webhook Endpoint Box */}
         <div className="space-y-2">
