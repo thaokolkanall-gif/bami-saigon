@@ -1,5 +1,5 @@
 const express = require('express');
-const { db } = require('../db');
+const { db, syncWriteToCloud } = require('../db');
 const { authenticateToken, requireOwner } = require('../middleware/auth');
 
 const router = express.Router();
@@ -41,29 +41,36 @@ router.post('/categories', authenticateToken, requireOwner, (req, res) => {
   const { name, display_order } = req.body;
   if (!name) return res.status(400).json({ error: 'Tên danh mục là bắt buộc' });
   const slug = slugify(name);
+  const finalSlug = slug + '-' + Date.now().toString().slice(-4);
+  const orderNum = parseInt(display_order) || 0;
   const result = db.prepare('INSERT INTO categories (name, slug, display_order) VALUES (?, ?, ?)').run(
     name,
-    slug + '-' + Date.now().toString().slice(-4),
-    parseInt(display_order) || 0
+    finalSlug,
+    orderNum
   );
+  syncWriteToCloud('INSERT OR REPLACE INTO categories (id, name, slug, display_order) VALUES (?, ?, ?, ?)', [result.lastInsertRowid, name, finalSlug, orderNum]);
   res.json({ success: true, id: result.lastInsertRowid });
 });
 
 router.put('/categories/:id', authenticateToken, requireOwner, (req, res) => {
   const { id } = req.params;
   const { name, display_order, is_active } = req.body;
+  const orderNum = parseInt(display_order) || 0;
+  const activeNum = is_active ? 1 : 0;
   db.prepare('UPDATE categories SET name = ?, display_order = ?, is_active = ? WHERE id = ?').run(
     name,
-    parseInt(display_order) || 0,
-    is_active ? 1 : 0,
+    orderNum,
+    activeNum,
     id
   );
+  syncWriteToCloud('UPDATE categories SET name = ?, display_order = ?, is_active = ? WHERE id = ?', [name, orderNum, activeNum, id]);
   res.json({ success: true });
 });
 
 router.delete('/categories/:id', authenticateToken, requireOwner, (req, res) => {
   const { id } = req.params;
   db.prepare('DELETE FROM categories WHERE id = ?').run(id);
+  syncWriteToCloud('DELETE FROM categories WHERE id = ?', [id]);
   res.json({ success: true });
 });
 
@@ -75,21 +82,26 @@ router.post('/products', authenticateToken, requireOwner, (req, res) => {
   }
 
   const slug = slugify(name) + '-' + Date.now().toString().slice(-4);
+  const catId = category_id || null;
+  const desc = description || '';
+  const pPrice = parseInt(price) || 0;
+  const pOrigPrice = original_price ? parseInt(original_price) : null;
+  const img = image_url || '/bami-saigon-store.jpg';
+  const feat = is_featured ? 1 : 0;
+  const avail = is_available !== undefined ? (is_available ? 1 : 0) : 1;
+  const ord = parseInt(display_order) || 0;
+
   const result = db.prepare(`
     INSERT INTO products (category_id, name, slug, description, price, original_price, image_url, is_featured, is_available, display_order)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    category_id || null,
-    name,
-    slug,
-    description || '',
-    parseInt(price) || 0,
-    original_price ? parseInt(original_price) : null,
-    image_url || '/bami-saigon-store.jpg',
-    is_featured ? 1 : 0,
-    is_available !== undefined ? (is_available ? 1 : 0) : 1,
-    parseInt(display_order) || 0
+    catId, name, slug, desc, pPrice, pOrigPrice, img, feat, avail, ord
   );
+
+  syncWriteToCloud(`
+    INSERT OR REPLACE INTO products (id, category_id, name, slug, description, price, original_price, image_url, is_featured, is_available, display_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [result.lastInsertRowid, catId, name, slug, desc, pPrice, pOrigPrice, img, feat, avail, ord]);
 
   db.prepare('INSERT INTO audit_logs (username, action, details) VALUES (?, ?, ?)')
     .run(req.user.username, 'Thêm món mới', `Tên món: ${name}, Giá: ${price}đ`);
@@ -100,6 +112,13 @@ router.post('/products', authenticateToken, requireOwner, (req, res) => {
 router.put('/products/:id', authenticateToken, requireOwner, (req, res) => {
   const { id } = req.params;
   const { category_id, name, description, price, original_price, image_url, is_featured, is_available, display_order } = req.body;
+  const catId = category_id || null;
+  const desc = description || '';
+  const pPrice = parseInt(price) || 0;
+  const pOrigPrice = original_price ? parseInt(original_price) : null;
+  const feat = is_featured ? 1 : 0;
+  const avail = is_available ? 1 : 0;
+  const ord = parseInt(display_order) || 0;
 
   db.prepare(`
     UPDATE products 
@@ -107,17 +126,15 @@ router.put('/products/:id', authenticateToken, requireOwner, (req, res) => {
         image_url = ?, is_featured = ?, is_available = ?, display_order = ?
     WHERE id = ?
   `).run(
-    category_id || null,
-    name,
-    description || '',
-    parseInt(price) || 0,
-    original_price ? parseInt(original_price) : null,
-    image_url,
-    is_featured ? 1 : 0,
-    is_available ? 1 : 0,
-    parseInt(display_order) || 0,
-    id
+    catId, name, desc, pPrice, pOrigPrice, image_url, feat, avail, ord, id
   );
+
+  syncWriteToCloud(`
+    UPDATE products 
+    SET category_id = ?, name = ?, description = ?, price = ?, original_price = ?, 
+        image_url = ?, is_featured = ?, is_available = ?, display_order = ?
+    WHERE id = ?
+  `, [catId, name, desc, pPrice, pOrigPrice, image_url, feat, avail, ord, id]);
 
   db.prepare('INSERT INTO audit_logs (username, action, details) VALUES (?, ?, ?)')
     .run(req.user.username, 'Sửa thông tin món', `Mã món: ${id}, Tên: ${name}`);
@@ -129,7 +146,9 @@ router.put('/products/:id', authenticateToken, requireOwner, (req, res) => {
 router.patch('/products/:id/availability', authenticateToken, (req, res) => {
   const { id } = req.params;
   const { is_available } = req.body;
-  db.prepare('UPDATE products SET is_available = ? WHERE id = ?').run(is_available ? 1 : 0, id);
+  const avail = is_available ? 1 : 0;
+  db.prepare('UPDATE products SET is_available = ? WHERE id = ?').run(avail, id);
+  syncWriteToCloud('UPDATE products SET is_available = ? WHERE id = ?', [avail, id]);
   
   const product = db.prepare('SELECT name FROM products WHERE id = ?').get(id);
   db.prepare('INSERT INTO audit_logs (username, action, details) VALUES (?, ?, ?)')
@@ -141,6 +160,7 @@ router.patch('/products/:id/availability', authenticateToken, (req, res) => {
 router.delete('/products/:id', authenticateToken, requireOwner, (req, res) => {
   const { id } = req.params;
   db.prepare('DELETE FROM products WHERE id = ?').run(id);
+  syncWriteToCloud('DELETE FROM products WHERE id = ?', [id]);
   res.json({ success: true });
 });
 
@@ -150,25 +170,28 @@ router.post('/toppings', authenticateToken, requireOwner, (req, res) => {
   if (!name || price === undefined) {
     return res.status(400).json({ error: 'Tên topping và giá là bắt buộc' });
   }
-  const result = db.prepare('INSERT INTO toppings (name, price) VALUES (?, ?)').run(name, parseInt(price) || 0);
+  const p = parseInt(price) || 0;
+  const result = db.prepare('INSERT INTO toppings (name, price) VALUES (?, ?)').run(name, p);
+  syncWriteToCloud('INSERT OR REPLACE INTO toppings (id, name, price) VALUES (?, ?, ?)', [result.lastInsertRowid, name, p]);
   res.json({ success: true, id: result.lastInsertRowid });
 });
 
 router.put('/toppings/:id', authenticateToken, requireOwner, (req, res) => {
   const { id } = req.params;
   const { name, price, is_available } = req.body;
+  const p = parseInt(price) || 0;
+  const avail = is_available ? 1 : 0;
   db.prepare('UPDATE toppings SET name = ?, price = ?, is_available = ? WHERE id = ?').run(
-    name,
-    parseInt(price) || 0,
-    is_available ? 1 : 0,
-    id
+    name, p, avail, id
   );
+  syncWriteToCloud('UPDATE toppings SET name = ?, price = ?, is_available = ? WHERE id = ?', [name, p, avail, id]);
   res.json({ success: true });
 });
 
 router.delete('/toppings/:id', authenticateToken, requireOwner, (req, res) => {
   const { id } = req.params;
   db.prepare('DELETE FROM toppings WHERE id = ?').run(id);
+  syncWriteToCloud('DELETE FROM toppings WHERE id = ?', [id]);
   res.json({ success: true });
 });
 
@@ -178,43 +201,53 @@ router.post('/combos', authenticateToken, requireOwner, (req, res) => {
   if (!name || price === undefined) {
     return res.status(400).json({ error: 'Tên combo và giá là bắt buộc' });
   }
+  const desc = description || '';
+  const p = parseInt(price) || 0;
+  const origP = original_price ? parseInt(original_price) : null;
+  const img = image_url || '/bami-saigon-store.jpg';
+  const itemsStr = typeof items_json === 'object' ? JSON.stringify(items_json) : (items_json || '[]');
+
   const result = db.prepare(`
     INSERT INTO combos (name, description, price, original_price, image_url, items_json)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
-    name,
-    description || '',
-    parseInt(price) || 0,
-    original_price ? parseInt(original_price) : null,
-    image_url || '/bami-saigon-store.jpg',
-    typeof items_json === 'object' ? JSON.stringify(items_json) : (items_json || '[]')
-  );
+  `).run(name, desc, p, origP, img, itemsStr);
+
+  syncWriteToCloud(`
+    INSERT OR REPLACE INTO combos (id, name, description, price, original_price, image_url, items_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `, [result.lastInsertRowid, name, desc, p, origP, img, itemsStr]);
+
   res.json({ success: true, id: result.lastInsertRowid });
 });
 
 router.put('/combos/:id', authenticateToken, requireOwner, (req, res) => {
   const { id } = req.params;
   const { name, description, price, original_price, image_url, items_json, is_available } = req.body;
+  const desc = description || '';
+  const p = parseInt(price) || 0;
+  const origP = original_price ? parseInt(original_price) : null;
+  const itemsStr = typeof items_json === 'object' ? JSON.stringify(items_json) : (items_json || '[]');
+  const avail = is_available ? 1 : 0;
+
   db.prepare(`
     UPDATE combos 
     SET name = ?, description = ?, price = ?, original_price = ?, image_url = ?, items_json = ?, is_available = ?
     WHERE id = ?
-  `).run(
-    name,
-    description || '',
-    parseInt(price) || 0,
-    original_price ? parseInt(original_price) : null,
-    image_url,
-    typeof items_json === 'object' ? JSON.stringify(items_json) : (items_json || '[]'),
-    is_available ? 1 : 0,
-    id
-  );
+  `).run(name, desc, p, origP, image_url, itemsStr, avail, id);
+
+  syncWriteToCloud(`
+    UPDATE combos 
+    SET name = ?, description = ?, price = ?, original_price = ?, image_url = ?, items_json = ?, is_available = ?
+    WHERE id = ?
+  `, [name, desc, p, origP, image_url, itemsStr, avail, id]);
+
   res.json({ success: true });
 });
 
 router.delete('/combos/:id', authenticateToken, requireOwner, (req, res) => {
   const { id } = req.params;
   db.prepare('DELETE FROM combos WHERE id = ?').run(id);
+  syncWriteToCloud('DELETE FROM combos WHERE id = ?', [id]);
   res.json({ success: true });
 });
 

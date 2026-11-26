@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { initDatabase, db, syncFromCloudOnStart } = require('./db');
+const { initDatabase, db, syncFromCloudOnStart, backupAllToCloud } = require('./db');
 
 // Initialize database schema & seeds
 initDatabase();
@@ -95,4 +95,26 @@ app.listen(PORT, () => {
   console.log(`🚀 Port: ${PORT}`);
   console.log(`🌐 Local API: http://localhost:${PORT}/api/store/settings`);
   console.log(`=========================================`);
+
+  // Tự động sao lưu toàn bộ dữ liệu ngầm lên Turso Cloud mỗi 3 phút (Lớp bảo vệ dữ liệu vĩnh viễn)
+  setInterval(() => {
+    backupAllToCloud().then(count => {
+      if (count > 0) console.log(`💾 [Tự động sao lưu] Đã bảo toàn ${count} bản ghi dữ liệu lên Turso Cloud.`);
+    }).catch(() => {});
+  }, 3 * 60 * 1000);
 });
+
+// Xử lý bảo toàn 100% dữ liệu trước khi Render tắt / cập nhật máy chủ
+const handleGracefulShutdown = async (signal) => {
+  console.log(`⚡ [${signal}] Máy chủ chuẩn bị cập nhật / tắt. Đang sao lưu toàn bộ dữ liệu lên Turso Cloud...`);
+  try {
+    const count = await backupAllToCloud();
+    console.log(`✅ [Bảo toàn dữ liệu thành công] Đã lưu ${count} bản ghi lên Turso Cloud an toàn.`);
+  } catch (err) {
+    console.error('Lỗi sao lưu trước khi tắt:', err);
+  }
+  process.exit(0);
+};
+
+process.on('SIGTERM', () => handleGracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => handleGracefulShutdown('SIGINT'));

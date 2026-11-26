@@ -323,7 +323,7 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
     `);
 
     for (const item of verifiedOrderItems) {
-      insertItem.run(
+      const itemRes = insertItem.run(
         orderId,
         item.product_id,
         item.product_name,
@@ -333,13 +333,22 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
         item.toppings_json,
         item.note
       );
+      syncWriteToCloud(`
+        INSERT OR REPLACE INTO order_items (id, order_id, product_id, product_name, unit_price, quantity, subtotal, toppings_json, note)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [itemRes.lastInsertRowid, orderId, item.product_id, item.product_name, item.unit_price, item.quantity, item.subtotal, item.toppings_json, item.note]);
     }
 
     // Insert order history
-    db.prepare(`
+    const histRes = db.prepare(`
       INSERT INTO order_history (order_id, from_status, to_status, note, updated_by)
       VALUES (?, NULL, ?, ?, 'Khách hàng')
     `).run(orderId, initialStatus, initialStatus === 'pending_payment' ? 'Khách tạo đơn - Chờ thanh toán chuyển khoản trước' : 'Khách hàng tạo đơn trực tuyến');
+
+    syncWriteToCloud(`
+      INSERT OR REPLACE INTO order_history (id, order_id, from_status, to_status, note, updated_by)
+      VALUES (?, ?, NULL, ?, ?, 'Khách hàng')
+    `, [histRes.lastInsertRowid, orderId, initialStatus, initialStatus === 'pending_payment' ? 'Khách tạo đơn - Chờ thanh toán chuyển khoản trước' : 'Khách hàng tạo đơn trực tuyến']);
 
     // Đồng bộ đơn hàng mới lên Turso Cloud
     syncWriteToCloud(`
@@ -379,7 +388,7 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
 
     // Create admin notification (only notify immediately for COD orders; prepay orders notify after payment)
     if (initialStatus === 'new') {
-      db.prepare(`
+      const notifRes = db.prepare(`
         INSERT INTO notifications (title, message, type, order_id)
         VALUES (?, ?, 'order', ?)
       `).run(
@@ -387,6 +396,10 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
         `Khách ${customer_name} vừa đặt đơn ${totalAmount.toLocaleString('vi-VN')}đ`,
         orderId
       );
+      syncWriteToCloud(`
+        INSERT OR REPLACE INTO notifications (id, title, message, type, order_id)
+        VALUES (?, ?, ?, 'order', ?)
+      `, [notifRes.lastInsertRowid, `Đơn hàng mới #${orderCode}`, `Khách ${customer_name} vừa đặt đơn ${totalAmount.toLocaleString('vi-VN')}đ`, orderId]);
     }
 
     return { orderId, orderCode, trackingToken, totalAmount, initialStatus };
@@ -652,12 +665,14 @@ router.put('/admin/:id/notes', authenticateToken, (req, res) => {
   const { id } = req.params;
   const { internal_notes } = req.body;
   db.prepare('UPDATE orders SET internal_notes = ? WHERE id = ?').run(internal_notes, id);
+  syncWriteToCloud('UPDATE orders SET internal_notes = ? WHERE id = ?', [internal_notes, id]);
   res.json({ success: true });
 });
 
 // 9. ADMIN: Mark notifications read
 router.post('/admin/notifications/mark-read', authenticateToken, (req, res) => {
   db.prepare('UPDATE notifications SET is_read = 1 WHERE is_read = 0').run();
+  syncWriteToCloud('UPDATE notifications SET is_read = 1 WHERE is_read = 0');
   res.json({ success: true });
 });
 

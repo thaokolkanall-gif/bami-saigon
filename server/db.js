@@ -108,6 +108,39 @@ function syncWriteToCloud(sql, params = []) {
     .catch(err => console.warn('Lỗi ghi ngầm lên Turso Cloud:', err.message));
 }
 
+// Helper: Backup 100% of all local tables to Turso Cloud (Full sync safety net)
+async function backupAllToCloud() {
+  if (!tursoClient) return 0;
+  try {
+    const tables = db.prepare("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'test_%'").all();
+    let totalRowsSynced = 0;
+
+    for (const t of tables) {
+      try {
+        const createSql = t.sql.replace(/CREATE TABLE\s+(?!IF NOT EXISTS)/i, 'CREATE TABLE IF NOT EXISTS ');
+        await tursoClient.execute(createSql);
+      } catch (e) {}
+
+      const rows = db.prepare(`SELECT * FROM "${t.name}"`).all();
+      if (!rows || rows.length === 0) continue;
+
+      for (const row of rows) {
+        const keys = Object.keys(row);
+        const cols = keys.map(k => `"${k}"`).join(', ');
+        const placeholders = keys.map(() => '?').join(', ');
+        const values = keys.map(k => row[k]);
+        const sql = `INSERT OR REPLACE INTO "${t.name}" (${cols}) VALUES (${placeholders})`;
+        await tursoClient.execute({ sql, args: values });
+        totalRowsSynced++;
+      }
+    }
+    return totalRowsSynced;
+  } catch (err) {
+    console.warn('⚠️ Lỗi sao lưu dữ liệu lên Turso Cloud:', err.message);
+    return 0;
+  }
+}
+
 function initDatabase() {
   db.exec(`
     -- Store Settings table
@@ -695,5 +728,6 @@ module.exports = {
   initDatabase,
   tursoClient,
   syncFromCloudOnStart,
-  syncWriteToCloud
+  syncWriteToCloud,
+  backupAllToCloud
 };

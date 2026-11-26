@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const { db } = require('../db');
+const { db, syncWriteToCloud } = require('../db');
 const { generateCustomerToken, authenticateCustomer, authenticateToken, requireOwner } = require('../middleware/auth');
 const { rateLimiter } = require('../middleware/rate-limit');
 
@@ -36,6 +36,11 @@ router.post('/register', rateLimiter({ windowMs: 60000, max: 10 }), (req, res) =
     INSERT INTO customers (phone, email, full_name, password_hash, default_address, default_address_note, is_active)
     VALUES (?, ?, ?, ?, ?, ?, 1)
   `).run(cleanPhone, cleanEmail, full_name.trim(), passwordHash, default_address || null, default_address_note || null);
+
+  syncWriteToCloud(`
+    INSERT OR REPLACE INTO customers (id, phone, email, full_name, password_hash, default_address, default_address_note, is_active)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+  `, [result.lastInsertRowid, cleanPhone, cleanEmail, full_name.trim(), passwordHash, default_address || null, default_address_note || null]);
 
   const newCustomer = {
     id: result.lastInsertRowid,
@@ -143,6 +148,12 @@ router.put('/profile', authenticateCustomer, (req, res) => {
     WHERE id = ?
   `).run(full_name.trim(), cleanEmail, default_address || null, default_address_note || null, req.customer.id);
 
+  syncWriteToCloud(`
+    UPDATE customers 
+    SET full_name = ?, email = ?, default_address = ?, default_address_note = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `, [full_name.trim(), cleanEmail, default_address || null, default_address_note || null, req.customer.id]);
+
   res.json({
     success: true,
     message: 'Cập nhật thông tin thành công',
@@ -171,6 +182,7 @@ router.post('/change-password', authenticateCustomer, (req, res) => {
 
   const newHash = bcrypt.hashSync(new_password, 10);
   db.prepare('UPDATE customers SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(newHash, req.customer.id);
+  syncWriteToCloud('UPDATE customers SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [newHash, req.customer.id]);
 
   res.json({ success: true, message: 'Đổi mật khẩu thành công' });
 });
@@ -195,6 +207,7 @@ router.post('/forgot-password', rateLimiter({ windowMs: 60000, max: 5 }), (req, 
   const expires = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 mins
 
   db.prepare('UPDATE customers SET reset_token = ?, reset_token_expires = ? WHERE id = ?').run(resetToken, expires, customer.id);
+  syncWriteToCloud('UPDATE customers SET reset_token = ?, reset_token_expires = ? WHERE id = ?', [resetToken, expires, customer.id]);
 
   // Return reset info (In production, if email service connected, would send email. Here we provide reset link / token)
   res.json({
@@ -224,6 +237,7 @@ router.post('/reset-password', (req, res) => {
 
   const newHash = bcrypt.hashSync(new_password, 10);
   db.prepare('UPDATE customers SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(newHash, customer.id);
+  syncWriteToCloud('UPDATE customers SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [newHash, customer.id]);
 
   res.json({ success: true, message: 'Đặt lại mật khẩu thành công. Quý khách có thể đăng nhập ngay bây giờ.' });
 });
