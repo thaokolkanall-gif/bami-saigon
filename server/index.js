@@ -21,11 +21,41 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Static uploads directory
+// Static uploads directory with Turso Cloud permanent storage fallback
 const uploadDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
+
+// Phục vụ tệp ảnh tải lên với cơ chế bảo vệ kép:
+// 1. Nếu file đã có trong thư mục uploads/ -> phục vụ ngay từ ổ đĩa
+// 2. Nếu file chưa có trên ổ đĩa (do Render vừa redeploy hoặc restart) -> đọc từ Turso Cloud / SQLite, ghi cache lại ổ đĩa và trả về ngay
+app.get('/uploads/:filename', (req, res, next) => {
+  const filename = path.basename(req.params.filename);
+  const filePath = path.join(uploadDir, filename);
+
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
+  }
+
+  try {
+    const row = db.prepare('SELECT mime_type, data_base64 FROM uploaded_images WHERE filename = ?').get(filename);
+    if (row && row.data_base64) {
+      const imgBuffer = Buffer.from(row.data_base64, 'base64');
+      try {
+        fs.writeFileSync(filePath, imgBuffer);
+      } catch (e) {}
+      res.setHeader('Content-Type', row.mime_type || 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      return res.send(imgBuffer);
+    }
+  } catch (err) {
+    console.warn('Lỗi đọc ảnh từ cơ sở dữ liệu đám mây:', err.message);
+  }
+
+  next();
+});
+
 app.use('/uploads', express.static(uploadDir));
 
 // Also serve public files (e.g. initial images)

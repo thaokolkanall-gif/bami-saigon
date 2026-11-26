@@ -1,5 +1,6 @@
 const Database = require('better-sqlite3');
 const path = require('path');
+const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const { createClient } = require('@libsql/client');
 
@@ -71,6 +72,30 @@ async function syncFromCloudOnStart() {
       }
     }
     console.log('🎉 Đồng bộ thành công 100% dữ liệu từ Turso Cloud! Không bao giờ bị mất dữ liệu cũ.');
+
+    // Tự động khôi phục tất cả tệp ảnh từ bảng uploaded_images vào thư mục uploads/ trên ổ đĩa
+    try {
+      const uploadDir = path.join(__dirname, '..', 'uploads');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      const imgRows = db.prepare("SELECT filename, data_base64 FROM uploaded_images").all();
+      let restoredCount = 0;
+      for (const img of imgRows) {
+        if (img.filename && img.data_base64) {
+          const destPath = path.join(uploadDir, img.filename);
+          if (!fs.existsSync(destPath)) {
+            fs.writeFileSync(destPath, Buffer.from(img.data_base64, 'base64'));
+            restoredCount++;
+          }
+        }
+      }
+      if (restoredCount > 0) {
+        console.log(`🖼️ Đã khôi phục thành công ${restoredCount} tệp ảnh từ Turso Cloud vào thư mục uploads/!`);
+      }
+    } catch (imgErr) {
+      console.warn('Lưu ý khi khôi phục ảnh vào ổ đĩa:', imgErr.message);
+    }
   } catch (err) {
     console.error('⚠️ Không thể đồng bộ từ Turso Cloud (sử dụng bản lưu SQLite cục bộ):', err.message);
   }
@@ -306,6 +331,14 @@ function initDatabase() {
         order_id INTEGER,
         UNIQUE(customer_id, promotion_id)
       );
+
+      -- Uploaded images table for permanent cloud storage
+      CREATE TABLE IF NOT EXISTS uploaded_images (
+        filename TEXT PRIMARY KEY,
+        mime_type TEXT NOT NULL,
+        data_base64 TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
     `);
   } catch(e){}
 
@@ -323,6 +356,14 @@ function initDatabase() {
         used_at DATETIME,
         order_id INTEGER,
         UNIQUE(customer_id, promotion_id)
+      );
+    `).catch(() => {});
+    tursoClient.execute(`
+      CREATE TABLE IF NOT EXISTS uploaded_images (
+        filename TEXT PRIMARY KEY,
+        mime_type TEXT NOT NULL,
+        data_base64 TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `).catch(() => {});
   }
