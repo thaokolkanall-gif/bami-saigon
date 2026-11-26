@@ -1,12 +1,87 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const bcrypt = require('bcryptjs');
+const { createClient } = require('@libsql/client');
 
 const dbPath = path.join(__dirname, '..', 'data.sqlite');
 const db = new Database(dbPath);
 
 // Enable WAL mode for high performance concurrency
 db.pragma('journal_mode = WAL');
+
+// Turso Cloud Client (if configured)
+const tursoUrl = process.env.TURSO_DATABASE_URL || 'libsql://bami-saigon-thaokolkanall-gif.aws-ap-southeast-1.turso.io';
+const tursoToken = process.env.TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTU2ODQ0NjYsImlkIjoiMDFhMjE3MWYtOTUwMS03YWRjLThiMWQtZjZmMmVlMjRlMjg4Iiwia2lkIjoiNUxfc2NZWUJJODZhZWl2akxrTFZGSklsX2tlU2hSMFdkaWtXUFo4SmpWQSIsInJpZCI6IjgxYTA1MDNiLTk3ODAtNDU1ZC1hZjY3LTJiZGEzZDE3OTVmMiJ9.3ENz-XoB-PBqWzbq1NtYZchBjfk-Fs59bcowIR-9U_9AABkxKk8oF2DpW970kjKDfjIpiNzrR0ZPu5pFQVEqBQ';
+
+let tursoClient = null;
+if (tursoUrl && tursoToken) {
+  try {
+    tursoClient = createClient({
+      url: tursoUrl,
+      authToken: tursoToken
+    });
+    console.log('✅ Đã cấu hình Turso Cloud Client:', tursoUrl);
+  } catch (e) {
+    console.warn('⚠️ Không thể khởi tạo Turso Client:', e.message);
+  }
+}
+
+// Helper: Synchronize local SQLite with Turso Cloud on server startup
+async function syncFromCloudOnStart() {
+  if (!tursoClient) return;
+  try {
+    console.log('🔄 Đang đồng bộ dữ liệu mới nhất từ Turso Cloud về máy chủ...');
+    const tablesRes = await tursoClient.execute("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'test_%'");
+    
+    if (!tablesRes.rows || tablesRes.rows.length === 0) {
+      console.log('Turso Cloud trống, bỏ qua đồng bộ ban đầu.');
+      return;
+    }
+
+    // Check if Turso has data in products
+    const prodCheck = await tursoClient.execute("SELECT COUNT(*) as count FROM products");
+    if (prodCheck.rows[0].count === 0) {
+      console.log('Turso Cloud chưa có dữ liệu sản phẩm, giữ nguyên dữ liệu gốc.');
+      return;
+    }
+
+    const syncTx = db.transaction(() => {
+      for (const t of tablesRes.rows) {
+        // Ensure table creation uses IF NOT EXISTS
+        const createSql = t.sql.replace(/CREATE TABLE\s+(?!IF NOT EXISTS)/i, 'CREATE TABLE IF NOT EXISTS ');
+        db.exec(createSql);
+      }
+    });
+    syncTx();
+
+    for (const t of tablesRes.rows) {
+      const rowsRes = await tursoClient.execute(`SELECT * FROM "${t.name}"`);
+      if (rowsRes.rows.length > 0) {
+        const keys = Object.keys(rowsRes.rows[0]);
+        const cols = keys.map(k => `"${k}"`).join(', ');
+        const placeholders = keys.map(() => '?').join(', ');
+        const insertStmt = db.prepare(`INSERT OR REPLACE INTO "${t.name}" (${cols}) VALUES (${placeholders})`);
+        
+        const insertMany = db.transaction((rows) => {
+          for (const row of rows) {
+            insertStmt.run(keys.map(k => row[k]));
+          }
+        });
+        insertMany(rowsRes.rows);
+      }
+    }
+    console.log('🎉 Đồng bộ thành công 100% dữ liệu từ Turso Cloud! Không bao giờ bị mất dữ liệu cũ.');
+  } catch (err) {
+    console.error('⚠️ Không thể đồng bộ từ Turso Cloud (sử dụng bản lưu SQLite cục bộ):', err.message);
+  }
+}
+
+// Helper: Sync single write to Turso Cloud in the background (Non-blocking)
+function syncWriteToCloud(sql, params = []) {
+  if (!tursoClient) return;
+  tursoClient.execute({ sql, args: params })
+    .catch(err => console.warn('Lỗi ghi ngầm lên Turso Cloud:', err.message));
+}
 
 function initDatabase() {
   db.exec(`
@@ -546,5 +621,8 @@ function seedDefaultData() {
 
 module.exports = {
   db,
-  initDatabase
+  initDatabase,
+  tursoClient,
+  syncFromCloudOnStart,
+  syncWriteToCloud
 };

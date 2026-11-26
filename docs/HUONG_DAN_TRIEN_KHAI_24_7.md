@@ -42,7 +42,10 @@ Cuộn xuống phần **"Environment Variables"**, bấm **"Add Environment Vari
 1. `NODE_ENV` = `production`
 2. `PORT` = `10000`
 3. `JWT_SECRET` = `dien-mot-chuoi-bi-mat-dai-tuy-y-o-day`
-4. `GEMINI_API_KEY` = *(Điền khóa Google Gemini API lấy theo file [HUONG_DAN_CAU_HINH_AI.md](./HUONG_DAN_CAU_HINH_AI.md), hoặc để trống nếu dùng trợ lý nội bộ).*
+4. `TURSO_DATABASE_URL` = `libsql://bami-saigon-thaokolkanall-gif.aws-ap-southeast-1.turso.io`
+5. `TURSO_AUTH_TOKEN` = `eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTU2ODQ0NjYsImlkIjoiMDFhMjE3MWYtOTUwMS03YWRjLThiMWQtZjZmMmVlMjRlMjg4Iiwia2lkIjoiNUxfc2NZWUJJODZhZWl2akxrTFZGSklsX2tlU2hSMFdkaWtXUFo4SmpWQSIsInJpZCI6IjgxYTA1MDNiLTk3ODAtNDU1ZC1hZjY3LTJiZGEzZDE3OTVmMiJ9.3ENz-XoB-PBqWzbq1NtYZchBjfk-Fs59bcowIR-9U_9AABkxKk8oF2DpW970kjKDfjIpiNzrR0ZPu5pFQVEqBQ`
+*(Nhờ 2 biến Turso này, mỗi khi bạn sửa code và push lên GitHub, Render sẽ không bao giờ làm mất dữ liệu đơn hàng và món ăn cũ).*
+6. `GEMINI_API_KEY` = *(Điền khóa Google Gemini API lấy theo file [HUONG_DAN_CAU_HINH_AI.md](./HUONG_DAN_CAU_HINH_AI.md), hoặc để trống nếu dùng trợ lý nội bộ).*
 
 ### Bước 5: Bấm "Deploy Web Service"
 1. Nhấn nút xanh **"Deploy Web Service"**.

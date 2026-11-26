@@ -1,8 +1,84 @@
 const express = require('express');
-const { db } = require('../db');
+const { db, tursoClient } = require('../db');
 const { authenticateToken, requireOwner } = require('../middleware/auth');
 
 const router = express.Router();
+
+// Backup & Sync to Turso Cloud manually or check status
+router.post('/cloud-backup', authenticateToken, requireOwner, async (req, res) => {
+  if (!tursoClient) {
+    return res.status(400).json({ error: 'Chưa cấu hình Turso Cloud Client' });
+  }
+
+  try {
+    const tables = db.prepare("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'test_%'").all();
+    let totalRowsSynced = 0;
+
+    for (const t of tables) {
+      try {
+        await tursoClient.execute(t.sql);
+      } catch (e) {}
+
+      const rows = db.prepare(`SELECT * FROM "${t.name}"`).all();
+      if (rows.length === 0) continue;
+
+      for (const row of rows) {
+        const keys = Object.keys(row);
+        const cols = keys.map(k => `"${k}"`).join(', ');
+        const placeholders = keys.map(() => '?').join(', ');
+        const values = keys.map(k => row[k]);
+        const sql = `INSERT OR REPLACE INTO "${t.name}" (${cols}) VALUES (${placeholders})`;
+        await tursoClient.execute({ sql, args: values });
+        totalRowsSynced++;
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Đã sao lưu thành công ${totalRowsSynced} bản ghi lên Turso Cloud! Dữ liệu được bảo toàn vĩnh viễn.`
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi sao lưu lên Cloud: ' + err.message });
+  }
+});
+
+// Restore from Turso Cloud manually
+router.post('/cloud-restore', authenticateToken, requireOwner, async (req, res) => {
+  if (!tursoClient) {
+    return res.status(400).json({ error: 'Chưa cấu hình Turso Cloud Client' });
+  }
+
+  try {
+    const tablesRes = await tursoClient.execute("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'test_%'");
+    let totalRowsRestored = 0;
+
+    for (const t of tablesRes.rows) {
+      db.exec(t.sql);
+      const rowsRes = await tursoClient.execute(`SELECT * FROM "${t.name}"`);
+      if (rowsRes.rows.length > 0) {
+        const keys = Object.keys(rowsRes.rows[0]);
+        const cols = keys.map(k => `"${k}"`).join(', ');
+        const placeholders = keys.map(() => '?').join(', ');
+        const insertStmt = db.prepare(`INSERT OR REPLACE INTO "${t.name}" (${cols}) VALUES (${placeholders})`);
+        
+        const insertMany = db.transaction((rows) => {
+          for (const row of rows) {
+            insertStmt.run(keys.map(k => row[k]));
+            totalRowsRestored++;
+          }
+        });
+        insertMany(rowsRes.rows);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Đã phục hồi thành công ${totalRowsRestored} bản ghi từ Turso Cloud!`
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi phục hồi từ Cloud: ' + err.message });
+  }
+});
 
 // Get public store info & operational settings
 router.get('/settings', (req, res) => {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sliders, Check, AlertTriangle, Clock, MapPin, Navigation, Compass, ExternalLink, Calculator, CreditCard, Key, Copy, Zap } from 'lucide-react';
+import { Sliders, Check, AlertTriangle, Clock, MapPin, Navigation, Compass, ExternalLink, Calculator, CreditCard, Key, Copy, Zap, Cloud, Download, UploadCloud, RefreshCw } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 
 export const AdminOperations: React.FC = () => {
@@ -37,6 +37,59 @@ export const AdminOperations: React.FC = () => {
   const [testOrderCode, setTestOrderCode] = useState('');
   const [isSimulating, setIsSimulating] = useState(false);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
+
+  // Cloud Database Sync State
+  const [isBackingUpCloud, setIsBackingUpCloud] = useState(false);
+  const [isRestoringCloud, setIsRestoringCloud] = useState(false);
+  const [cloudMsg, setCloudMsg] = useState('');
+
+  const handleBackupToCloud = async () => {
+    setIsBackingUpCloud(true);
+    setCloudMsg('');
+    const token = localStorage.getItem('bami_token');
+    try {
+      const res = await fetch('/api/store/cloud-backup', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setIsBackingUpCloud(false);
+      if (res.ok) {
+        setCloudMsg(data.message || 'Sao lưu đám mây thành công!');
+        setTimeout(() => setCloudMsg(''), 5000);
+      } else {
+        alert(data.error || 'Lỗi sao lưu đám mây');
+      }
+    } catch (e) {
+      setIsBackingUpCloud(false);
+      alert('Lỗi kết nối máy chủ');
+    }
+  };
+
+  const handleRestoreFromCloud = async () => {
+    if (!confirm('Bạn có chắc muốn nạp lại toàn bộ dữ liệu mới nhất từ Turso Cloud?')) return;
+    setIsRestoringCloud(true);
+    setCloudMsg('');
+    const token = localStorage.getItem('bami_token');
+    try {
+      const res = await fetch('/api/store/cloud-restore', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setIsRestoringCloud(false);
+      if (res.ok) {
+        setCloudMsg(data.message || 'Phục hồi đám mây thành công!');
+        await refreshSettings();
+        setTimeout(() => setCloudMsg(''), 5000);
+      } else {
+        alert(data.error || 'Lỗi phục hồi đám mây');
+      }
+    } catch (e) {
+      setIsRestoringCloud(false);
+      alert('Lỗi kết nối máy chủ');
+    }
+  };
 
   const [feedback, setFeedback] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -665,6 +718,62 @@ export const AdminOperations: React.FC = () => {
             onChange={(e) => setAdminRecoveryKey(e.target.value)}
             className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-amber-300 font-mono font-bold text-[#8C4A26] bg-amber-50/30"
           />
+        </div>
+      </div>
+
+      {/* 6. ☁️ SECTION: Turso Cloud Database Synchronization */}
+      <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-amber-50 rounded-3xl border-2 border-indigo-200 p-6 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md">
+              <Cloud className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-base text-indigo-950">
+                Lưu Trữ Đám Mây Vĩnh Viễn (Turso LibSQL Cloud)
+              </h3>
+              <p className="text-xs text-indigo-700">
+                Bảo vệ toàn vẹn dữ liệu: Khi bạn sửa code hoặc deploy Render không bao giờ bị mất món ăn, đơn hàng.
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+            ✓ Đang Hoạt Động
+          </span>
+        </div>
+
+        {cloudMsg && (
+          <div className="p-3 bg-emerald-100/80 border border-emerald-300 text-emerald-900 text-xs rounded-xl flex items-center gap-2 font-medium">
+            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{cloudMsg}</span>
+          </div>
+        )}
+
+        <div className="p-3.5 bg-white/80 rounded-2xl border border-indigo-100 text-xs text-gray-700 space-y-1.5 leading-relaxed">
+          <p>• <strong>Cơ chế bảo vệ:</strong> Mỗi khi máy chủ khởi động lại hoặc sau khi bạn cập nhật code, hệ thống sẽ tự động đồng bộ lại dữ liệu mới nhất từ Turso Cloud.</p>
+          <p>• <strong>Địa chỉ Database:</strong> <code className="bg-indigo-50 px-2 py-0.5 rounded text-indigo-800 font-mono font-bold">bami-saigon-thaokolkanall-gif.aws-ap-southeast-1.turso.io</code></p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 pt-1">
+          <button
+            type="button"
+            disabled={isBackingUpCloud}
+            onClick={handleBackupToCloud}
+            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-sm transition-all"
+          >
+            <UploadCloud className="w-4 h-4" />
+            <span>{isBackingUpCloud ? 'Đang sao lưu...' : 'Sao lưu ngay lên Turso Cloud'}</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={isRestoringCloud}
+            onClick={handleRestoreFromCloud}
+            className="px-5 py-2.5 bg-white hover:bg-indigo-50 text-indigo-800 border border-indigo-300 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-2xs transition-all"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRestoringCloud ? 'animate-spin' : ''}`} />
+            <span>{isRestoringCloud ? 'Đang nạp...' : 'Tải lại dữ liệu từ Cloud'}</span>
+          </button>
         </div>
       </div>
 

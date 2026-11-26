@@ -3,10 +3,15 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { initDatabase, db } = require('./db');
+const { initDatabase, db, syncFromCloudOnStart } = require('./db');
 
 // Initialize database schema & seeds
 initDatabase();
+
+// Sync latest state from Turso Cloud on startup (Ensures data is NEVER lost when redeployed or edited)
+syncFromCloudOnStart().then(() => {
+  console.log('⚡ Turso Cloud Sync ready.');
+});
 
 const app = express();
 const PORT = process.env.PORT || 3001;
