@@ -91,6 +91,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
       setPaymentMethod('cod');
     }
   }, [isBankTransferAllowed, paymentMethod]);
+
+  // Shipping fee logic: 0 for pickup, calculated by distance for delivery
+  const actualDeliveryFee = orderType === 'delivery' ? deliveryFee : 0;
   const finalTotal = Math.max(0, subtotal - discountAmount + actualDeliveryFee);
 
   // Apply Voucher
