@@ -341,6 +341,25 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
       VALUES (?, NULL, ?, ?, 'Khách hàng')
     `).run(orderId, initialStatus, initialStatus === 'pending_payment' ? 'Khách tạo đơn - Chờ thanh toán chuyển khoản trước' : 'Khách hàng tạo đơn trực tuyến');
 
+    // Đồng bộ đơn hàng mới lên Turso Cloud
+    syncWriteToCloud(`
+      INSERT OR REPLACE INTO orders (
+        id, order_code, tracking_token, customer_name, customer_phone, order_type,
+        address, address_note, distance_km, customer_lat, customer_lng, pickup_time,
+        order_note, payment_method, status, subtotal, discount_amount, delivery_fee,
+        total_amount, idempotency_key, customer_id, is_prepaid, promo_code
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      orderId, orderCode, trackingToken, customer_name.trim(), customer_phone.trim(), order_type,
+      address ? address.trim() : null, address_note ? address_note.trim() : null,
+      finalDistanceKm, customer_lat ? parseFloat(customer_lat) : null,
+      customer_lng ? parseFloat(customer_lng) : null, pickup_time || null,
+      order_note || null, payment_method === 'transfer' ? 'transfer' : 'cod',
+      initialStatus, subtotal, discountAmount, deliveryFee, totalAmount,
+      idempotency_key || null, customer_id || null, (payment_method === 'transfer' || is_prepaid) ? 1 : 0,
+      appliedPromoCode || null
+    ]);
+
     // Update promo usage & 1-time-per-customer record
     if (validPromoId) {
       db.prepare('UPDATE promotions SET used_count = used_count + 1 WHERE id = ?').run(validPromoId);
@@ -397,6 +416,7 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
 
 // 2. PUBLIC: Track Order by secure unguessable token
 router.get('/track/:trackingToken', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   const { trackingToken } = req.params;
   const order = db.prepare('SELECT * FROM orders WHERE tracking_token = ?').get(trackingToken);
 
@@ -539,6 +559,18 @@ router.put('/admin/:id/status', authenticateToken, (req, res) => {
     `).run(id, order.status, status, note || `Cập nhật trạng thái sang: ${status}`, req.user.full_name || req.user.username);
   })();
 
+  // Đồng bộ trạng thái mới ngay lập tức lên Turso Cloud
+  syncWriteToCloud('UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [status, id]);
+
+  // Phát tín hiệu thời gian thực SSE tới tất cả trình duyệt khách hàng và admin
+  broadcastOrderEvent({
+    type: 'order_status_updated',
+    order_id: parseInt(id),
+    order_code: order.order_code,
+    tracking_token: order.tracking_token,
+    status
+  });
+
   res.json({ success: true, status });
 });
 
@@ -564,6 +596,19 @@ router.put('/admin/:id/cancel', authenticateToken, (req, res) => {
     `).run(id, order.status, `Hủy đơn: ${cancel_reason.trim()}`, req.user.full_name || req.user.username);
   })();
 
+  // Đồng bộ hủy đơn lên Turso Cloud
+  syncWriteToCloud("UPDATE orders SET status = 'cancelled', cancel_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [cancel_reason.trim(), id]);
+
+  // Phát tín hiệu thời gian thực SSE
+  broadcastOrderEvent({
+    type: 'order_status_updated',
+    order_id: parseInt(id),
+    order_code: order.order_code,
+    tracking_token: order.tracking_token,
+    status: 'cancelled',
+    cancel_reason: cancel_reason.trim()
+  });
+
   res.json({ success: true, message: 'Đã hủy đơn hàng thành công' });
 });
 
@@ -577,11 +622,27 @@ router.put('/admin/:id/payment', authenticateToken, (req, res) => {
     return res.status(400).json({ error: 'Trạng thái thanh toán không hợp lệ' });
   }
 
+  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+
   db.prepare('UPDATE orders SET payment_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
     .run(payment_status, id);
 
   db.prepare('INSERT INTO audit_logs (username, action, details) VALUES (?, ?, ?)')
     .run(req.user.username, 'Cập nhật thanh toán đơn hàng', `Đơn #${id}: trạng thái thanh toán -> ${payment_status}`);
+
+  // Đồng bộ trạng thái thanh toán lên Turso Cloud
+  syncWriteToCloud('UPDATE orders SET payment_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [payment_status, id]);
+
+  // Phát tín hiệu SSE
+  if (order) {
+    broadcastOrderEvent({
+      type: 'payment_received',
+      order_id: parseInt(id),
+      order_code: order.order_code,
+      tracking_token: order.tracking_token,
+      payment_status
+    });
+  }
 
   res.json({ success: true });
 });

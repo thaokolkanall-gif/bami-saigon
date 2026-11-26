@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, User, Phone, MapPin, Mail, ShoppingBag, Clock, Key, LogOut, CheckCircle2, AlertCircle, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { X, User, Phone, MapPin, Mail, ShoppingBag, Clock, Key, LogOut, CheckCircle2, AlertCircle, ChevronRight, RefreshCw } from 'lucide-react';
 import { useCustomer } from '../context/CustomerContext';
 
 interface CustomerAccountModalProps {
@@ -41,20 +41,50 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({ isOp
     }
   }, [customer]);
 
+  const fetchOrders = useCallback(() => {
+    if (!token) return;
+    setIsLoadingOrders(true);
+    fetch('/api/customers/me', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Cache-Control': 'no-cache'
+      }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.orders) setOrders(data.orders);
+      })
+      .catch(() => {})
+      .finally(() => setIsLoadingOrders(false));
+  }, [token]);
+
   useEffect(() => {
     if (isOpen && token) {
-      setIsLoadingOrders(true);
-      fetch('/api/customers/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.orders) setOrders(data.orders);
-        })
-        .catch(() => {})
-        .finally(() => setIsLoadingOrders(false));
+      fetchOrders();
+
+      // Cập nhật ngầm định kỳ mỗi 8 giây khi khách đang mở modal
+      const interval = setInterval(fetchOrders, 8000);
+
+      // Nhận tín hiệu thời gian thực SSE khi admin đổi trạng thái đơn
+      let eventSource: EventSource | null = null;
+      try {
+        eventSource = new EventSource('/api/orders/events');
+        eventSource.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data.type === 'order_status_updated' || data.type === 'payment_received') {
+              fetchOrders();
+            }
+          } catch (err) {}
+        };
+      } catch (e) {}
+
+      return () => {
+        clearInterval(interval);
+        if (eventSource) eventSource.close();
+      };
     }
-  }, [isOpen, token]);
+  }, [isOpen, token, fetchOrders]);
 
   if (!isOpen || !customer) return null;
 
@@ -188,6 +218,20 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({ isOp
         {/* TAB 1: ORDER HISTORY */}
         {activeTab === 'orders' && (
           <div className="space-y-3">
+            <div className="flex items-center justify-between pb-1">
+              <span className="text-xs text-gray-500">
+                Hiển thị {orders.length} đơn hàng gần nhất
+              </span>
+              <button
+                type="button"
+                onClick={() => fetchOrders()}
+                disabled={isLoadingOrders}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs text-[#8C4A26] hover:bg-amber-50 rounded-lg transition-colors cursor-pointer border border-amber-200"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingOrders ? 'animate-spin' : ''}`} />
+                <span>{isLoadingOrders ? 'Đang tải...' : 'Làm mới'}</span>
+              </button>
+            </div>
             {isLoadingOrders ? (
               <p className="text-xs text-gray-500 text-center py-8">Đang tải lịch sử đơn hàng...</p>
             ) : orders.length === 0 ? (

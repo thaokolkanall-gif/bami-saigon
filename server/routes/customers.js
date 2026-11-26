@@ -98,19 +98,21 @@ router.post('/login', rateLimiter({ windowMs: 60000, max: 15 }), (req, res) => {
 
 // 3. Customer Profile & Order History
 router.get('/me', authenticateCustomer, (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   const customer = db.prepare('SELECT id, phone, email, full_name, default_address, default_address_note, is_active, created_at FROM customers WHERE id = ?').get(req.customer.id);
   if (!customer || !customer.is_active) {
     return res.status(401).json({ error: 'Tài khoản không tồn tại hoặc đã bị khóa' });
   }
 
-  // Get order history
+  // Get order history (match by customer_id or phone number)
+  const cleanPhone = (customer.phone || '').replace(/\s+/g, '');
   const orders = db.prepare(`
     SELECT id, order_code, tracking_token, order_type, total_amount, status, payment_status, payment_method, is_prepaid, created_at
     FROM orders
-    WHERE customer_id = ? OR customer_phone = ?
+    WHERE customer_id = ? OR REPLACE(customer_phone, ' ', '') = ?
     ORDER BY id DESC
-    LIMIT 30
-  `).all(customer.id, customer.phone);
+    LIMIT 50
+  `).all(customer.id, cleanPhone);
 
   res.json({
     customer,

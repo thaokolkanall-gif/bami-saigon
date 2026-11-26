@@ -1,5 +1,5 @@
 const express = require('express');
-const { db } = require('../db');
+const { db, syncWriteToCloud } = require('../db');
 const ordersRouter = require('./orders');
 const { authenticateToken, requireOwner } = require('../middleware/auth');
 
@@ -110,6 +110,17 @@ router.post('/webhook', (req, res) => {
         WHERE id = ?
       `).run(newOrderStatus, tx.reference || 'WEBHOOK_TRANSFER', order.id);
 
+      syncWriteToCloud(`
+        UPDATE orders 
+        SET payment_status = 'paid', 
+            payment_method = 'transfer', 
+            is_prepaid = 1, 
+            status = ?,
+            paid_at = CURRENT_TIMESTAMP, 
+            transaction_ref = ?
+        WHERE id = ?
+      `, [newOrderStatus, tx.reference || 'WEBHOOK_TRANSFER', order.id]);
+
       // Record Order History
       db.prepare(`
         INSERT INTO order_history (order_id, from_status, to_status, note, updated_by)
@@ -198,6 +209,17 @@ router.post('/simulate', authenticateToken, requireOwner, (req, res) => {
         transaction_ref = ?
     WHERE id = ?
   `).run(newOrderStatus, refCode, order.id);
+
+  syncWriteToCloud(`
+    UPDATE orders 
+    SET payment_status = 'paid', 
+        payment_method = 'transfer', 
+        is_prepaid = 1, 
+        status = ?,
+        paid_at = CURRENT_TIMESTAMP, 
+        transaction_ref = ?
+    WHERE id = ?
+  `, [newOrderStatus, refCode, order.id]);
 
   db.prepare(`
     INSERT INTO order_history (order_id, from_status, to_status, note, updated_by)
