@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Sparkles, Clock, Phone, MapPin, ShieldCheck, Tag, ShoppingBag, Navigation } from 'lucide-react';
+import { ArrowRight, Sparkles, Clock, Phone, MapPin, ShieldCheck, Tag, ShoppingBag, Navigation, Copy, Check, Gift } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { Product, Combo, Promotion, Topping } from '../types';
 import { DishDetailModal } from '../components/DishDetailModal';
@@ -15,6 +15,13 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [toppings, setToppings] = useState<Topping[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  const handleCopyVoucher = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
 
   useEffect(() => {
     fetch('/api/menu')
@@ -55,6 +62,55 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   return (
     <div className="space-y-16 sm:space-y-24 pb-16">
       
+      {/* 🌟 VOUCHER RIBBON AT THE VERY TOP (Thu hút khách hàng nhận voucher ngay khi vào trang) */}
+      {promotions.length > 0 && (
+        <section className="bg-gradient-to-r from-[#8C4A26] via-[#B85C2A] to-[#8C4A26] text-white py-2.5 px-4 shadow-md sticky top-20 z-30">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs font-bold shrink-0">
+              <span className="w-6 h-6 rounded-lg bg-[#F5BD42] text-[#4A2115] flex items-center justify-center text-sm shadow-xs animate-bounce">
+                🎁
+              </span>
+              <span className="uppercase tracking-wider text-[#F5BD42] font-black">Ưu đãi Voucher hôm nay:</span>
+            </div>
+
+            <div className="flex items-center gap-3 overflow-x-auto w-full md:w-auto py-1 scrollbar-none">
+              {promotions.map(promo => (
+                <div 
+                  key={promo.id} 
+                  className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/25 rounded-xl px-3 py-1.5 transition-all shrink-0"
+                >
+                  <div className="text-left">
+                    <span className="font-mono font-black text-xs text-[#F5BD42] tracking-wider block">
+                      {promo.code}
+                    </span>
+                    <span className="text-[10px] text-white/90 truncate block max-w-[160px]">
+                      {promo.discount_type === 'percent' ? `Giảm ${promo.discount_value}%` : `Giảm ${promo.discount_value.toLocaleString('vi-VN')}đ`} (Đơn {promo.min_order_value.toLocaleString('vi-VN')}đ)
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => handleCopyVoucher(promo.code)}
+                    className="p-1.5 rounded-lg bg-[#F5BD42] hover:bg-[#E5AC32] text-[#4A2115] font-black text-[10px] flex items-center gap-1 shadow-xs cursor-pointer transition-transform active:scale-95"
+                    title="Sao chép mã"
+                  >
+                    {copiedCode === promo.code ? <Check className="w-3 h-3 text-emerald-800" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedCode === promo.code ? 'Đã lưu' : 'Nhận mã'}</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => onNavigate('menu')}
+              className="text-xs font-bold text-amber-200 hover:text-white flex items-center gap-1 shrink-0"
+            >
+              <span>Xem thực đơn</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </section>
+      )}
+
       {/* 1. HERO SECTION */}
       <section className="relative overflow-hidden bg-gradient-to-b from-[#F5BD42]/20 via-[#FFF8E8] to-[#FFF8E8] pt-8 sm:pt-16 pb-12 sm:pb-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -136,8 +192,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         </div>
       </section>
 
-      {/* 2. PROMOTIONS & COMBOS BANNER (Hidden when no active promos) */}
-      {(promotions.length > 0 || combos.length > 0) && (
+      {/* 2. PROMOTIONS & COMBOS BANNER (Hiển thị các gói Combo Ưu đãi trong ô vuông) */}
+      {combos.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="rounded-3xl bg-gradient-to-r from-[#F5BD42] via-[#E5AC32] to-[#8C4A26] p-6 sm:p-8 text-[#4A2115] shadow-xl relative overflow-hidden">
             <div className="relative z-10">
@@ -149,52 +205,25 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-                {promotions.map(promo => (
-                  <div key={promo.id} className="bg-white/95 backdrop-blur-xs p-4 rounded-2xl border border-white shadow-md flex flex-col justify-between">
+                {combos.map(combo => (
+                  <div key={combo.id} className="bg-white/95 backdrop-blur-xs p-5 rounded-2xl border border-white shadow-md flex flex-col justify-between">
                     <div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono font-black text-base text-[#8C4A26] bg-[#FFF8E8] px-2.5 py-1 rounded-lg border border-[#F5BD42]">
-                          {promo.code}
-                        </span>
-                        <span className="text-xs font-bold text-rose-600">
-                          {promo.discount_type === 'percent' ? `Giảm ${promo.discount_value}%` : `Giảm ${promo.discount_value.toLocaleString('vi-VN')}đ`}
-                        </span>
-                      </div>
-                      <p className="font-bold text-sm text-[#4A2115] mt-2 leading-snug">
-                        {promo.title}
-                      </p>
-                    </div>
-                    <div className="mt-3 pt-2 border-t border-amber-100 flex items-center justify-between text-[11px] text-gray-500">
-                      <span>Đơn từ: {promo.min_order_value.toLocaleString('vi-VN')}đ</span>
-                      <button
-                        onClick={() => onNavigate('menu')}
-                        className="text-[#8C4A26] font-bold hover:underline"
-                      >
-                        Dùng ngay →
-                      </button>
-                    </div>
-                  </div>
-                ))}
-
-                {combos.slice(0, 2).map(combo => (
-                  <div key={combo.id} className="bg-white/95 backdrop-blur-xs p-4 rounded-2xl border border-white shadow-md flex flex-col justify-between">
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-100 px-2.5 py-0.5 rounded-full inline-block">
                         Combo Tiết Kiệm
                       </span>
-                      <h4 className="font-bold text-sm text-[#4A2115] mt-1 line-clamp-1">{combo.name}</h4>
-                      <p className="text-xs text-gray-600 mt-1 line-clamp-2">{combo.description}</p>
+                      <h4 className="font-bold text-base text-[#4A2115] mt-2 line-clamp-1">{combo.name}</h4>
+                      <p className="text-xs text-gray-600 mt-1 line-clamp-2 leading-relaxed">{combo.description}</p>
                     </div>
-                    <div className="mt-3 pt-2 border-t border-amber-100 flex items-center justify-between">
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="font-black text-sm text-[#8C4A26]">{combo.price.toLocaleString('vi-VN')}đ</span>
+                    <div className="mt-4 pt-3 border-t border-amber-100 flex items-center justify-between">
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-black text-base text-[#8C4A26]">{combo.price.toLocaleString('vi-VN')}đ</span>
                         {combo.original_price && (
-                          <span className="text-[11px] text-gray-400 line-through">{combo.original_price.toLocaleString('vi-VN')}đ</span>
+                          <span className="text-xs text-gray-400 line-through">{combo.original_price.toLocaleString('vi-VN')}đ</span>
                         )}
                       </div>
                       <button
                         onClick={() => onNavigate('menu')}
-                        className="text-xs font-bold px-3 py-1 bg-[#8C4A26] text-white rounded-lg hover:bg-[#753A1B]"
+                        className="text-xs font-bold px-4 py-2 bg-[#8C4A26] hover:bg-[#753A1B] text-white rounded-xl shadow-xs transition-all cursor-pointer"
                       >
                         Đặt combo
                       </button>
