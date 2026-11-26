@@ -330,27 +330,20 @@ function initDatabase() {
   // 1. Seed default data if categories empty
   seedDefaultData();
 
-  // 2. Always guarantee default admin and staff exist & active
+  // 2. Guarantee default admin and staff exist if not created yet (Do NOT overwrite existing passwords)
   try {
-    const ownerHash = bcrypt.hashSync('admin123', 10);
-    const staffHash = bcrypt.hashSync('nhanvien123', 10);
-
     const adminUser = db.prepare('SELECT id FROM users WHERE username = ?').get('admin');
     if (!adminUser) {
+      const ownerHash = bcrypt.hashSync('admin123', 10);
       db.prepare('INSERT INTO users (username, password_hash, full_name, role, is_active) VALUES (?, ?, ?, ?, 1)')
         .run('admin', ownerHash, 'Chủ Quán Bami', 'owner');
-    } else {
-      db.prepare('UPDATE users SET password_hash = ?, is_active = 1 WHERE username = ?')
-        .run(ownerHash, 'admin');
     }
 
     const staffUser = db.prepare('SELECT id FROM users WHERE username = ?').get('nhanvien');
     if (!staffUser) {
+      const staffHash = bcrypt.hashSync('nhanvien123', 10);
       db.prepare('INSERT INTO users (username, password_hash, full_name, role, is_active) VALUES (?, ?, ?, ?, 1)')
         .run('nhanvien', staffHash, 'Thu Ngân & Bếp', 'staff');
-    } else {
-      db.prepare('UPDATE users SET password_hash = ?, is_active = 1 WHERE username = ?')
-        .run(staffHash, 'nhanvien');
     }
   } catch (err) {
     console.error('Error ensuring admin user:', err);

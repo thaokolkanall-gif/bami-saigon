@@ -1,13 +1,13 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { db } = require('../db');
+const { db, syncWriteToCloud } = require('../db');
 const { generateToken, authenticateToken, requireOwner } = require('../middleware/auth');
 const { rateLimiter } = require('../middleware/rate-limit');
 
 const router = express.Router();
 
-// Admin Login
-router.post('/login', rateLimiter({ windowMs: 60000, max: 10, message: 'Đăng nhập sai quá nhiều lần. Vui lòng thử lại sau 1 phút.' }), (req, res) => {
+// Admin Login (Protected by strict rate limiter)
+router.post('/login', rateLimiter({ windowMs: 60000, max: 5, message: 'Đăng nhập sai quá nhiều lần. Vui lòng đợi 1 phút để thử lại.' }), (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Vui lòng nhập tên đăng nhập và mật khẩu' });
@@ -53,6 +53,7 @@ router.post('/change-password', authenticateToken, (req, res) => {
 
   const newHash = bcrypt.hashSync(new_password, 10);
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, req.user.id);
+  syncWriteToCloud('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, req.user.id]);
 
   res.json({ success: true, message: 'Đổi mật khẩu thành công' });
 });
@@ -119,8 +120,10 @@ router.post('/admin-recovery', rateLimiter({ windowMs: 60000, max: 5 }), (req, r
   const adminUser = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
   if (adminUser) {
     db.prepare("UPDATE users SET password_hash = ?, is_active = 1 WHERE username = 'admin'").run(newHash);
+    syncWriteToCloud("UPDATE users SET password_hash = ?, is_active = 1 WHERE username = 'admin'", [newHash]);
   } else {
     db.prepare("INSERT INTO users (username, password_hash, full_name, role, is_active) VALUES ('admin', ?, 'Chủ Quán Bami', 'owner', 1)").run(newHash);
+    syncWriteToCloud("INSERT INTO users (username, password_hash, full_name, role, is_active) VALUES ('admin', ?, 'Chủ Quán Bami', 'owner', 1)", [newHash]);
   }
 
   // Audit log

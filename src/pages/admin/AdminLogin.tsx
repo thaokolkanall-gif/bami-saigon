@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, User, ShieldAlert, ArrowRight, Sparkles, KeyRound } from 'lucide-react';
+import { Lock, User, ShieldAlert, ArrowRight, KeyRound, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { AdminRecovery } from './AdminRecovery';
 
 interface AdminLoginProps {
@@ -10,6 +10,7 @@ interface AdminLoginProps {
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackToHome }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showRecovery, setShowRecovery] = useState(false);
@@ -27,12 +28,12 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username: username.trim(), password })
       });
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Đăng nhập không thành công');
+        setError(data.error || 'Tên đăng nhập hoặc mật khẩu không chính xác');
       } else {
         localStorage.setItem('bami_token', data.token);
         localStorage.setItem('bami_user', JSON.stringify(data.user));
@@ -43,11 +44,6 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleFillDemo = (u: string, p: string) => {
-    setUsername(u);
-    setPassword(p);
   };
 
   return (
@@ -61,7 +57,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
           Bami Sài Gòn Admin
         </h2>
         <p className="text-xs text-gray-600">
-          Hệ thống quản lý thực đơn, đơn hàng và trợ lý AI cho chủ quán
+          Cổng đăng nhập hệ thống quản lý nội bộ dành riêng cho Chủ quán và Nhân viên
         </p>
       </div>
 
@@ -75,7 +71,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
             <div>
               <label className="block text-xs font-bold text-[#4A2115] mb-1">
                 Tài khoản đăng nhập
@@ -85,9 +81,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
                 <input
                   type="text"
                   required
+                  autoComplete="username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin hoặc nhanvien"
+                  placeholder="Nhập tên tài khoản..."
                   className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-amber-200 text-sm focus:outline-hidden focus:border-[#8C4A26] bg-[#FFF8E8]/40"
                 />
               </div>
@@ -109,55 +106,47 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
               <div className="relative">
                 <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Nhập mật khẩu..."
-                  className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-amber-200 text-sm focus:outline-hidden focus:border-[#8C4A26] bg-[#FFF8E8]/40"
+                  placeholder="Nhập mật khẩu bí mật..."
+                  className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-amber-200 text-sm focus:outline-hidden focus:border-[#8C4A26] bg-[#FFF8E8]/40"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 px-4 bg-[#8C4A26] hover:bg-[#753A1B] text-white font-bold rounded-xl text-sm shadow-md transition-all cursor-pointer"
+              className="w-full py-3 px-4 bg-[#8C4A26] hover:bg-[#753A1B] text-white font-bold rounded-xl text-sm shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              {isLoading ? 'Đang xác thực...' : 'Đăng nhập vào hệ thống'}
+              <span>{isLoading ? 'Đang xác thực...' : 'Đăng nhập vào hệ thống'}</span>
+              <ArrowRight className="w-4 h-4" />
             </button>
           </form>
 
-          {/* Quick Demo Credentials Helpers */}
-          <div className="pt-3 border-t border-amber-100 space-y-2">
-            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block text-center">
-              Tài khoản mẫu thử nghiệm nhanh:
+          {/* Security Notice */}
+          <div className="p-3 bg-gray-50 rounded-2xl border border-gray-200 text-[11px] text-gray-500 flex items-start gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <span>
+              Hệ thống được bảo vệ bằng cơ chế mã hóa mật khẩu một chiều và chặn tự động các lượt thử đăng nhập sai liên tiếp.
             </span>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => handleFillDemo('admin', 'admin123')}
-                className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-left transition-colors"
-              >
-                <div className="font-bold text-[#8C4A26]">👑 Chủ Quán</div>
-                <div className="text-[10px] text-gray-500">admin / admin123</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleFillDemo('nhanvien', 'nhanvien123')}
-                className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-left transition-colors"
-              >
-                <div className="font-bold text-[#4A2115]">🧑‍🍳 Nhân Viên</div>
-                <div className="text-[10px] text-gray-500">nhanvien / nhanvien123</div>
-              </button>
-            </div>
           </div>
 
-          <div className="text-center pt-2">
+          <div className="text-center pt-1">
             <button
               onClick={onBackToHome}
-              className="text-xs text-gray-500 hover:text-[#8C4A26] transition-colors"
+              className="text-xs text-gray-500 hover:text-[#8C4A26] transition-colors cursor-pointer"
             >
               ← Quay lại trang chủ khách hàng
             </button>
