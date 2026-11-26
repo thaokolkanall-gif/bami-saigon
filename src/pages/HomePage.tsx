@@ -89,15 +89,21 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         body: JSON.stringify({ promo_id: promo.id })
       });
 
-      const data = await res.json();
-      if (res.ok) {
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+
+      if (res.ok && data) {
         showToast(`🎉 Nhận thành công mã ${promo.code}! Voucher đang chờ bạn sử dụng.`);
         fetchPromotions();
       } else {
-        showToast(data.error || 'Không thể nhận mã lúc này');
+        showToast(data?.error || 'Không thể nhận mã lúc này. Vui lòng thử lại sau.');
       }
     } catch {
-      showToast('Lỗi kết nối khi nhận mã');
+      showToast('Lỗi mạng khi kết nối máy chủ');
     } finally {
       setIsClaimingId(null);
     }

@@ -238,8 +238,8 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
       // Check single use per customer
       let isCustomerAlreadyUsed = false;
       if (customer_id) {
-        const usedClaim = db.prepare('SELECT id FROM customer_promotions WHERE customer_id = ? AND promotion_id = ? AND status = "used"').get(customer_id, promo.id);
-        const orderUsed = db.prepare('SELECT id FROM orders WHERE customer_id = ? AND UPPER(promo_code) = UPPER(?) AND status != "cancelled"').get(customer_id, promo.code);
+        const usedClaim = db.prepare("SELECT id FROM customer_promotions WHERE customer_id = ? AND promotion_id = ? AND status = 'used'").get(customer_id, promo.id);
+        const orderUsed = db.prepare("SELECT id FROM orders WHERE customer_id = ? AND UPPER(promo_code) = UPPER(?) AND status != 'cancelled'").get(customer_id, promo.code);
         if (usedClaim || orderUsed) {
           isCustomerAlreadyUsed = true;
         }
@@ -341,10 +341,10 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
       if (customer_id) {
         const existingClaim = db.prepare('SELECT id FROM customer_promotions WHERE customer_id = ? AND promotion_id = ?').get(customer_id, validPromoId);
         if (existingClaim) {
-          db.prepare('UPDATE customer_promotions SET status = "used", used_at = CURRENT_TIMESTAMP, order_id = ? WHERE id = ?').run(orderId, existingClaim.id);
+          db.prepare("UPDATE customer_promotions SET status = 'used', used_at = CURRENT_TIMESTAMP, order_id = ? WHERE id = ?").run(orderId, existingClaim.id);
           syncWriteToCloud('UPDATE customer_promotions SET status = ?, used_at = CURRENT_TIMESTAMP, order_id = ? WHERE id = ?', ['used', orderId, existingClaim.id]);
         } else {
-          db.prepare('INSERT INTO customer_promotions (customer_id, promotion_id, code, status, used_at, order_id) VALUES (?, ?, ?, "used", CURRENT_TIMESTAMP, ?)').run(customer_id, validPromoId, appliedPromoCode, orderId);
+          db.prepare("INSERT INTO customer_promotions (customer_id, promotion_id, code, status, used_at, order_id) VALUES (?, ?, ?, 'used', CURRENT_TIMESTAMP, ?)").run(customer_id, validPromoId, appliedPromoCode, orderId);
           syncWriteToCloud('INSERT INTO customer_promotions (customer_id, promotion_id, code, status, used_at, order_id) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)', [customer_id, validPromoId, appliedPromoCode, 'used', orderId]);
         }
       }
@@ -547,7 +547,7 @@ router.put('/admin/:id/cancel', authenticateToken, (req, res) => {
   if (!order) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
 
   db.transaction(() => {
-    db.prepare('UPDATE orders SET status = "cancelled", cancel_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    db.prepare("UPDATE orders SET status = 'cancelled', cancel_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
       .run(cancel_reason.trim(), id);
 
     db.prepare(`

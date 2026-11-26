@@ -34,8 +34,8 @@ router.post('/validate', (req, res) => {
   // Check 1-time-per-customer rule
   const customerId = customer_id || req.body.customerId;
   if (customerId) {
-    const usedClaim = db.prepare('SELECT id FROM customer_promotions WHERE customer_id = ? AND promotion_id = ? AND status = "used"').get(customerId, promo.id);
-    const orderUsed = db.prepare('SELECT id FROM orders WHERE customer_id = ? AND UPPER(promo_code) = UPPER(?) AND status != "cancelled"').get(customerId, promo.code);
+    const usedClaim = db.prepare("SELECT id FROM customer_promotions WHERE customer_id = ? AND promotion_id = ? AND status = 'used'").get(customerId, promo.id);
+    const orderUsed = db.prepare("SELECT id FROM orders WHERE customer_id = ? AND UPPER(promo_code) = UPPER(?) AND status != 'cancelled'").get(customerId, promo.code);
     if (usedClaim || orderUsed) {
       return res.status(400).json({ error: 'Bạn đã sử dụng mã voucher này rồi. Mỗi khách hàng chỉ được dùng 1 lần duy nhất.' });
     }
@@ -75,51 +75,51 @@ router.post('/validate', (req, res) => {
 
 // Customer: Claim a voucher into personal wallet (Only 1 time per customer rule)
 router.post('/claim', authenticateCustomer, (req, res) => {
-  const { promo_id, code } = req.body;
-  const customerId = req.customer.id;
-
-  let promo = null;
-  if (promo_id) {
-    promo = db.prepare('SELECT * FROM promotions WHERE id = ? AND is_active = 1').get(promo_id);
-  } else if (code) {
-    promo = db.prepare('SELECT * FROM promotions WHERE UPPER(code) = UPPER(?) AND is_active = 1').get(code.trim());
-  }
-
-  if (!promo) {
-    return res.status(404).json({ error: 'Mã voucher không tồn tại hoặc đã hết hiệu lực' });
-  }
-
-  const now = new Date();
-  if (promo.end_date && new Date(promo.end_date) < now) {
-    return res.status(400).json({ error: 'Voucher này đã hết hạn sử dụng theo thời gian quy định' });
-  }
-
-  // Check if customer already claimed / used
-  const existing = db.prepare('SELECT * FROM customer_promotions WHERE customer_id = ? AND promotion_id = ?').get(customerId, promo.id);
-  if (existing) {
-    if (existing.status === 'used') {
-      return res.status(400).json({ error: 'Bạn đã sử dụng voucher này rồi. Mỗi khách hàng chỉ được nhận và dùng 1 lần duy nhất.' });
-    }
-    return res.json({ 
-      success: true, 
-      status: 'claimed',
-      message: 'Voucher đã có trong tài khoản của bạn và đang chờ bạn sử dụng!' 
-    });
-  }
-
-  // Also check if customer used this voucher in prior completed order
-  const orderUsed = db.prepare('SELECT id FROM orders WHERE customer_id = ? AND UPPER(promo_code) = UPPER(?) AND status != "cancelled"').get(customerId, promo.code);
-  if (orderUsed) {
-    return res.status(400).json({ error: 'Bạn đã từng sử dụng mã ưu đãi này rồi. Mỗi khách hàng chỉ được dùng 1 lần duy nhất.' });
-  }
-
-  // Check overall max uses
-  if (promo.max_uses && promo.used_count >= promo.max_uses) {
-    return res.status(400).json({ error: 'Mã ưu đãi đã hết tổng số lượt phát' });
-  }
-
-  // Insert into customer_promotions
   try {
+    const { promo_id, code } = req.body;
+    const customerId = req.customer.id;
+
+    let promo = null;
+    if (promo_id) {
+      promo = db.prepare('SELECT * FROM promotions WHERE id = ? AND is_active = 1').get(promo_id);
+    } else if (code) {
+      promo = db.prepare('SELECT * FROM promotions WHERE UPPER(code) = UPPER(?) AND is_active = 1').get(code.trim());
+    }
+
+    if (!promo) {
+      return res.status(404).json({ error: 'Mã voucher không tồn tại hoặc đã hết hiệu lực' });
+    }
+
+    const now = new Date();
+    if (promo.end_date && new Date(promo.end_date) < now) {
+      return res.status(400).json({ error: 'Voucher này đã hết hạn sử dụng theo thời gian quy định' });
+    }
+
+    // Check if customer already claimed / used
+    const existing = db.prepare("SELECT * FROM customer_promotions WHERE customer_id = ? AND promotion_id = ?").get(customerId, promo.id);
+    if (existing) {
+      if (existing.status === 'used') {
+        return res.status(400).json({ error: 'Bạn đã sử dụng voucher này rồi. Mỗi khách hàng chỉ được nhận và dùng 1 lần duy nhất.' });
+      }
+      return res.json({ 
+        success: true, 
+        status: 'claimed',
+        message: 'Voucher đã có trong tài khoản của bạn và đang chờ bạn sử dụng!' 
+      });
+    }
+
+    // Also check if customer used this voucher in prior completed order
+    const orderUsed = db.prepare("SELECT id FROM orders WHERE customer_id = ? AND UPPER(promo_code) = UPPER(?) AND status != 'cancelled'").get(customerId, promo.code);
+    if (orderUsed) {
+      return res.status(400).json({ error: 'Bạn đã từng sử dụng mã ưu đãi này rồi. Mỗi khách hàng chỉ được dùng 1 lần duy nhất.' });
+    }
+
+    // Check overall max uses
+    if (promo.max_uses && promo.used_count >= promo.max_uses) {
+      return res.status(400).json({ error: 'Mã ưu đãi đã hết tổng số lượt phát' });
+    }
+
+    // Insert into customer_promotions
     db.prepare(`
       INSERT INTO customer_promotions (customer_id, promotion_id, code, status)
       VALUES (?, ?, ?, 'claimed')
@@ -136,7 +136,8 @@ router.post('/claim', authenticateCustomer, (req, res) => {
       message: 'Nhận voucher thành công! Voucher đang chờ bạn sử dụng.' 
     });
   } catch (err) {
-    res.status(500).json({ error: 'Lỗi khi lưu voucher vào tài khoản' });
+    console.error('Error claiming promotion:', err);
+    res.status(500).json({ error: 'Lỗi khi lưu voucher vào tài khoản: ' + err.message });
   }
 });
 
@@ -177,7 +178,7 @@ router.get('/', (req, res) => {
     const claimMap = new Map();
     claims.forEach(c => claimMap.set(c.promotion_id, c.status));
 
-    const ordersUsed = db.prepare('SELECT promo_code FROM orders WHERE customer_id = ? AND status != "cancelled"').all(customerUser.id);
+    const ordersUsed = db.prepare("SELECT promo_code FROM orders WHERE customer_id = ? AND status != 'cancelled'").all(customerUser.id);
     const usedCodes = new Set(ordersUsed.map(o => (o.promo_code || '').toUpperCase()));
 
     const enriched = promos.map(p => {

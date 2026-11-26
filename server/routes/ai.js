@@ -290,7 +290,7 @@ router.post('/apply', authenticateToken, requireOwner, (req, res) => {
 // 3. Revert AI Change
 router.post('/revert/:logId', authenticateToken, requireOwner, (req, res) => {
   const { logId } = req.params;
-  const log = db.prepare('SELECT * FROM ai_change_logs WHERE id = ? AND status = "applied"').get(logId);
+  const log = db.prepare("SELECT * FROM ai_change_logs WHERE id = ? AND status = 'applied'").get(logId);
   if (!log) {
     return res.status(404).json({ error: 'Không tìm thấy nhật ký thay đổi hoặc thay đổi đã được hoàn tác trước đó' });
   }
@@ -308,7 +308,7 @@ router.post('/revert/:logId', authenticateToken, requireOwner, (req, res) => {
       }
     }
 
-    db.prepare('UPDATE ai_change_logs SET status = "reverted" WHERE id = ?').run(logId);
+    db.prepare("UPDATE ai_change_logs SET status = 'reverted' WHERE id = ?").run(logId);
 
     db.prepare('INSERT INTO audit_logs (username, action, details) VALUES (?, ?, ?)')
       .run(req.user.username, 'Hoàn tác thay đổi từ Trợ lý AI', `Mã nhật ký: #${logId}`);
