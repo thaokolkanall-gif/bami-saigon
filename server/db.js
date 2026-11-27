@@ -37,11 +37,15 @@ async function syncFromCloudOnStart() {
   if (!tursoClient) return;
 
   // Các bảng giao dịch cần merge thêm từ Cloud (không ghi đè local)
+  // uploaded_images dùng ORDER BY filename (không có cột id)
   const MERGE_TABLES = [
     'orders', 'order_items', 'order_history',
     'customers', 'customer_promotions',
-    'notifications', 'audit_logs', 'lucky_wheel_spins'
+    'notifications', 'audit_logs', 'lucky_wheel_spins',
+    'uploaded_images'
   ];
+  // Bảng sắp xếp theo key khác (không phải id)
+  const TABLE_ORDER_COL = { 'uploaded_images': 'filename' };
 
   try {
     const localProductCount = db.prepare('SELECT COUNT(*) as count FROM products').get();
@@ -56,7 +60,8 @@ async function syncFromCloudOnStart() {
       let mergedCount = 0;
       for (const tname of MERGE_TABLES) {
         try {
-          const cloudRows = await tursoClient.execute(`SELECT * FROM "${tname}" ORDER BY id`);
+          const orderCol = TABLE_ORDER_COL[tname] || 'id';
+          const cloudRows = await tursoClient.execute(`SELECT * FROM "${tname}" ORDER BY "${orderCol}"`);
           if (!cloudRows.rows || cloudRows.rows.length === 0) continue;
           const keys = Object.keys(cloudRows.rows[0]);
           const cols = keys.map(k => `"${k}"`).join(', ');
