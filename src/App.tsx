@@ -26,6 +26,7 @@ import { AdminAuditLogs } from './pages/admin/AdminAuditLogs';
 import { AdminCustomers } from './pages/admin/AdminCustomers';
 import { CustomerAuthModal } from './components/CustomerAuthModal';
 import { CustomerAccountModal } from './components/CustomerAccountModal';
+import { LuckyWheelWidget } from './components/LuckyWheelWidget';
 import { useStore } from './context/StoreContext';
 
 export default function App() {
@@ -211,6 +212,12 @@ export default function App() {
       {/* Slide-out Cart Drawer */}
       <CartDrawer
         onCheckout={() => navigateTo('checkout')}
+      />
+
+      {/* Vòng quay may mắn */}
+      <LuckyWheelWidget
+        onNavigate={(view) => navigateTo(view)}
+        onOpenAccount={() => setIsAccountModalOpen(true)}
       />
 
       {/* Customer Modals */}

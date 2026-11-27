@@ -69,6 +69,7 @@ app.use('/api/promotions', require('./routes/promotions'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/customers', require('./routes/customers'));
 app.use('/api/payments', require('./routes/payments'));
+app.use('/api/lucky-wheel', require('./routes/lucky-wheel'));
 app.use('/api/admin/ai', require('./routes/ai'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/v1', require('./routes/app-api'));

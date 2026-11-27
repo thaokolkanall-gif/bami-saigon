@@ -372,6 +372,31 @@ function initDatabase() {
         data_base64 TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
+
+      -- Lucky Wheel Rewards table
+      CREATE TABLE IF NOT EXISTS lucky_wheel_rewards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        label TEXT NOT NULL,
+        reward_type TEXT NOT NULL DEFAULT 'voucher',
+        reward_value TEXT,
+        probability INTEGER NOT NULL DEFAULT 10,
+        color TEXT NOT NULL DEFAULT '#F5BD42',
+        text_color TEXT NOT NULL DEFAULT '#4A2115',
+        is_active INTEGER NOT NULL DEFAULT 1,
+        display_order INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- Lucky Wheel Spins history table
+      CREATE TABLE IF NOT EXISTS lucky_wheel_spins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER NOT NULL,
+        customer_phone TEXT NOT NULL,
+        reward_id INTEGER NOT NULL,
+        reward_label TEXT NOT NULL,
+        reward_code TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
     `);
   } catch(e){}
 
@@ -396,6 +421,31 @@ function initDatabase() {
         filename TEXT PRIMARY KEY,
         mime_type TEXT NOT NULL,
         data_base64 TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `).catch(() => {});
+    tursoClient.execute(`
+      CREATE TABLE IF NOT EXISTS lucky_wheel_rewards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        label TEXT NOT NULL,
+        reward_type TEXT NOT NULL DEFAULT 'voucher',
+        reward_value TEXT,
+        probability INTEGER NOT NULL DEFAULT 10,
+        color TEXT NOT NULL DEFAULT '#F5BD42',
+        text_color TEXT NOT NULL DEFAULT '#4A2115',
+        is_active INTEGER NOT NULL DEFAULT 1,
+        display_order INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `).catch(() => {});
+    tursoClient.execute(`
+      CREATE TABLE IF NOT EXISTS lucky_wheel_spins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER NOT NULL,
+        customer_phone TEXT NOT NULL,
+        reward_id INTEGER NOT NULL,
+        reward_label TEXT NOT NULL,
+        reward_code TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `).catch(() => {});
@@ -437,6 +487,84 @@ function initDatabase() {
   ensureSetting.run('admin_recovery_key', 'BAMI_ADMIN_MASTER_KEY_2026');
   ensureSetting.run('webhook_secret', 'bami_webhook_sec_2026');
   ensureSetting.run('sepay_api_key', '');
+
+  // 4. Ensure Lucky Wheel Rewards and Promotions exist
+  seedLuckyWheelIfMissing();
+}
+
+function seedLuckyWheelIfMissing() {
+  // Ensure default promotional vouchers for lucky wheel
+  const insertPromoIfMissing = (code, title, discountType, discountValue, minOrder) => {
+    try {
+      const exist = db.prepare('SELECT id FROM promotions WHERE code = ?').get(code);
+      if (!exist) {
+        db.prepare(`
+          INSERT INTO promotions (code, title, discount_type, discount_value, min_order_value, max_discount, max_uses, used_count, start_date, end_date, is_active, once_per_customer)
+          VALUES (?, ?, ?, ?, ?, ?, 9999, 0, ?, ?, 1, 1)
+        `).run(
+          code,
+          title,
+          discountType,
+          discountValue,
+          minOrder,
+          discountType === 'percent' ? 30000 : discountValue,
+          new Date(Date.now() - 7 * 86400000).toISOString(),
+          new Date(Date.now() + 365 * 86400000).toISOString()
+        );
+      }
+    } catch (e) {}
+  };
+
+  insertPromoIfMissing('BAMICHAO', 'Giảm 10% cho đơn hàng từ 50.000đ', 'percent', 10, 50000);
+  insertPromoIfMissing('GIAM15K', 'Giảm 15.000đ cho đơn hàng từ 80.000đ', 'fixed', 15000, 80000);
+  insertPromoIfMissing('QUAYTRUNG', 'Tặng 1 Trứng Ốp La (Giảm 6.000đ cho đơn từ 40.000đ)', 'fixed', 6000, 40000);
+  insertPromoIfMissing('QUAYBANHMI', 'Tặng 1 Bánh Mì Que Hải Phòng (Giảm 15.000đ cho đơn từ 50.000đ)', 'fixed', 15000, 50000);
+  insertPromoIfMissing('QUAYTRATAC', 'Tặng 1 Trà Tắc Hạt Chia (Giảm 18.000đ cho đơn từ 60.000đ)', 'fixed', 18000, 60000);
+  insertPromoIfMissing('QUAYCAFE', 'Tặng 1 Cà Phê Sữa Đá (Giảm 20.000đ cho đơn từ 70.000đ)', 'fixed', 20000, 70000);
+  insertPromoIfMissing('QUAY20K', 'Vòng Quay: Giảm ngay 20.000đ cho đơn từ 120.000đ', 'fixed', 20000, 120000);
+
+  // Default Lucky Wheel Rewards if empty
+  try {
+    const wheelCount = db.prepare('SELECT count(*) as count FROM lucky_wheel_rewards').get();
+    if (!wheelCount || wheelCount.count === 0) {
+      const insertReward = db.prepare(`
+        INSERT INTO lucky_wheel_rewards (label, reward_type, reward_value, probability, color, text_color, is_active, display_order)
+        VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+      `);
+      insertReward.run('Giảm 10%', 'voucher', 'BAMICHAO', 25, '#EF4444', '#FFFFFF', 1);
+      insertReward.run('Tặng Trứng Ốp La', 'free_item', 'QUAYTRUNG', 20, '#F97316', '#FFFFFF', 2);
+      insertReward.run('Giảm 15.000đ', 'voucher', 'GIAM15K', 15, '#F59E0B', '#FFFFFF', 3);
+      insertReward.run('Tặng Bánh Mì Que', 'free_item', 'QUAYBANHMI', 15, '#10B981', '#FFFFFF', 4);
+      insertReward.run('Tặng Trà Tắc', 'free_item', 'QUAYTRATAC', 10, '#06B6D4', '#FFFFFF', 5);
+      insertReward.run('Giảm 20.000đ', 'voucher', 'QUAY20K', 5, '#3B82F6', '#FFFFFF', 6);
+      insertReward.run('Tặng Cà Phê Sữa', 'free_item', 'QUAYCAFE', 5, '#8B5CF6', '#FFFFFF', 7);
+      insertReward.run('Chúc May Mắn', 'luck', '', 5, '#EC4899', '#FFFFFF', 8);
+
+      if (tursoClient) {
+        tursoClient.execute(`
+          INSERT INTO lucky_wheel_rewards (id, label, reward_type, reward_value, probability, color, text_color, is_active, display_order)
+          VALUES 
+            (1, 'Giảm 10%', 'voucher', 'BAMICHAO', 25, '#EF4444', '#FFFFFF', 1, 1),
+            (2, 'Tặng Trứng Ốp La', 'free_item', 'QUAYTRUNG', 20, '#F97316', '#FFFFFF', 1, 2),
+            (3, 'Giảm 15.000đ', 'voucher', 'GIAM15K', 15, '#F59E0B', '#FFFFFF', 1, 3),
+            (4, 'Tặng Bánh Mì Que', 'free_item', 'QUAYBANHMI', 15, '#10B981', '#FFFFFF', 1, 4),
+            (5, 'Tặng Trà Tắc', 'free_item', 'QUAYTRATAC', 10, '#06B6D4', '#FFFFFF', 1, 5),
+            (6, 'Giảm 20.000đ', 'voucher', 'QUAY20K', 5, '#3B82F6', '#FFFFFF', 1, 6),
+            (7, 'Tặng Cà Phê Sữa', 'free_item', 'QUAYCAFE', 5, '#8B5CF6', '#FFFFFF', 1, 7),
+            (8, 'Chúc May Mắn', 'luck', '', 5, '#EC4899', '#FFFFFF', 1, 8)
+          ON CONFLICT(id) DO NOTHING;
+        `).catch(() => {});
+      }
+    }
+  } catch (e) {
+    console.warn('Lỗi khởi tạo quà tặng vòng quay:', e.message);
+  }
+
+  // Ensure default settings
+  try {
+    db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('lucky_wheel_enabled', '1')").run();
+    db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('lucky_wheel_rule', 'daily')").run();
+  } catch (e) {}
 }
 
 function seedDefaultData() {
@@ -719,6 +847,57 @@ function seedDefaultData() {
   insertZone.run('Quận 4, Quận 5, Quận 10', 20000, 40000, '20-35 phút', 1);
   insertZone.run('Quận Bình Thạnh, Phú Nhuận', 22000, 50000, '25-35 phút', 1);
   insertZone.run('Quận 7, Tân Bình, Gò Vấp', 30000, 60000, '30-45 phút', 1);
+
+  // Default Lucky Wheel Promotions if missing
+  const insertPromoIfMissing = (code, title, discountType, discountValue, minOrder) => {
+    const exist = db.prepare('SELECT id FROM promotions WHERE code = ?').get(code);
+    if (!exist) {
+      db.prepare(`
+        INSERT INTO promotions (code, title, discount_type, discount_value, min_order_value, max_discount, max_uses, used_count, start_date, end_date, is_active, once_per_customer)
+        VALUES (?, ?, ?, ?, ?, ?, 9999, 0, ?, ?, 1, 1)
+      `).run(
+        code,
+        title,
+        discountType,
+        discountValue,
+        minOrder,
+        discountType === 'percent' ? 30000 : discountValue,
+        new Date(Date.now() - 7 * 86400000).toISOString(),
+        new Date(Date.now() + 365 * 86400000).toISOString()
+      );
+    }
+  };
+
+  insertPromoIfMissing('QUAYTRUNG', 'Tặng 1 Trứng Ốp La (Giảm 6.000đ cho đơn từ 40.000đ)', 'fixed', 6000, 40000);
+  insertPromoIfMissing('QUAYBANHMI', 'Tặng 1 Bánh Mì Que Hải Phòng (Giảm 15.000đ cho đơn từ 50.000đ)', 'fixed', 15000, 50000);
+  insertPromoIfMissing('QUAYTRATAC', 'Tặng 1 Trà Tắc Hạt Chia (Giảm 18.000đ cho đơn từ 60.000đ)', 'fixed', 18000, 60000);
+  insertPromoIfMissing('QUAYCAFE', 'Tặng 1 Cà Phê Sữa Đá (Giảm 20.000đ cho đơn từ 70.000đ)', 'fixed', 20000, 70000);
+  insertPromoIfMissing('QUAY20K', 'Vòng Quay: Giảm ngay 20.000đ cho đơn từ 120.000đ', 'fixed', 20000, 120000);
+
+  // Default Lucky Wheel Rewards if empty
+  try {
+    const wheelCount = db.prepare('SELECT count(*) as count FROM lucky_wheel_rewards').get();
+    if (!wheelCount || wheelCount.count === 0) {
+      const insertReward = db.prepare(`
+        INSERT INTO lucky_wheel_rewards (label, reward_type, reward_value, probability, color, text_color, is_active, display_order)
+        VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+      `);
+      insertReward.run('Giảm 10%', 'voucher', 'BAMICHAO', 25, '#F5BD42', '#4A2115', 1);
+      insertReward.run('Tặng Trứng Ốp La', 'free_item', 'QUAYTRUNG', 20, '#8C4A26', '#FFFFFF', 2);
+      insertReward.run('Giảm 15.000đ', 'voucher', 'GIAM15K', 15, '#D97706', '#FFFFFF', 3);
+      insertReward.run('Tặng Bánh Mì Que', 'free_item', 'QUAYBANHMI', 15, '#B45309', '#FFFFFF', 4);
+      insertReward.run('Tặng Trà Tắc', 'free_item', 'QUAYTRATAC', 10, '#F59E0B', '#4A2115', 5);
+      insertReward.run('Giảm 20.000đ', 'voucher', 'QUAY20K', 5, '#78350F', '#FFFFFF', 6);
+      insertReward.run('Tặng Cà Phê Sữa', 'free_item', 'QUAYCAFE', 5, '#92400E', '#FFFFFF', 7);
+      insertReward.run('Chúc Bạn May Mắn', 'luck', '', 5, '#FBBF24', '#4A2115', 8);
+    }
+  } catch (e) {}
+
+  // Lucky wheel default settings if missing
+  try {
+    db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('lucky_wheel_enabled', '1')").run();
+    db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('lucky_wheel_rule', 'daily')").run();
+  } catch (e) {}
 
   console.log('Seeding completed successfully.');
 }
