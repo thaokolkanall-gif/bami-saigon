@@ -1,6 +1,7 @@
 const express = require('express');
 const { db, syncWriteToCloud } = require('../db');
-const { authenticateToken, requireOwner, authenticateCustomer } = require('../middleware/auth');
+const { JWT_SECRET, authenticateToken, requireOwner, authenticateCustomer } = require('../middleware/auth');
+const jwt = require('jsonwebtoken');
 
 const router = express.Router();
 
@@ -43,19 +44,24 @@ router.get('/status', (req, res) => {
       enabled: isEnabled,
       rule,
       is_logged_in: false,
-      can_spin: false,
-      spins_left: 0,
-      message: 'Vui lòng đăng nhập để nhận lượt quay may mắn miễn phí'
+      can_spin: true,
+      spins_left: 1,
+      message: 'Vui lòng đăng nhập bằng số điện thoại để nhận ngay 1 lượt quay miễn phí!'
     });
   }
 
   // Verify customer
-  const jwt = require('jsonwebtoken');
-  const JWT_SECRET = process.env.JWT_SECRET || 'bami_saigon_jwt_secret_key_2026';
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     if (!decoded || !decoded.id) {
-      return res.json({ enabled: isEnabled, is_logged_in: false, can_spin: false, spins_left: 0 });
+      return res.json({
+        enabled: isEnabled,
+        rule,
+        is_logged_in: false,
+        can_spin: true,
+        spins_left: 1,
+        message: 'Vui lòng đăng nhập để nhận lượt quay may mắn miễn phí'
+      });
     }
 
     const customerId = decoded.id;
@@ -85,10 +91,18 @@ router.get('/status', (req, res) => {
       is_logged_in: true,
       can_spin: canSpin,
       spins_left: canSpin ? 1 : 0,
-      today_spins: spinsCount
+      today_spins: spinsCount,
+      message: canSpin ? 'Bạn đang có 1 lượt quay miễn phí!' : 'Hôm nay bạn đã dùng hết lượt quay. Hãy quay lại vào ngày mai nhé!'
     });
   } catch (err) {
-    return res.json({ enabled: isEnabled, is_logged_in: false, can_spin: false, spins_left: 0 });
+    return res.json({
+      enabled: isEnabled,
+      rule,
+      is_logged_in: false,
+      can_spin: true,
+      spins_left: 1,
+      message: 'Vui lòng đăng nhập để nhận lượt quay may mắn'
+    });
   }
 });
 

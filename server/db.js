@@ -158,6 +158,7 @@ function initDatabase() {
       full_name TEXT NOT NULL,
       role TEXT CHECK(role IN ('owner', 'staff')) NOT NULL DEFAULT 'staff',
       is_active INTEGER DEFAULT 1,
+      is_wheel_reward INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -168,6 +169,7 @@ function initDatabase() {
       slug TEXT UNIQUE NOT NULL,
       display_order INTEGER DEFAULT 0,
       is_active INTEGER DEFAULT 1,
+      is_wheel_reward INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -223,6 +225,7 @@ function initDatabase() {
       start_date DATETIME,
       end_date DATETIME,
       is_active INTEGER DEFAULT 1,
+      is_wheel_reward INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -400,7 +403,14 @@ function initDatabase() {
     `);
   } catch(e){}
 
+  try {
+    db.exec(`
+      ALTER TABLE promotions ADD COLUMN is_wheel_reward INTEGER DEFAULT 0;
+    `);
+  } catch(e){}
+
   if (tursoClient) {
+    tursoClient.execute(`ALTER TABLE promotions ADD COLUMN is_wheel_reward INTEGER DEFAULT 0;`).catch(() => {});
     tursoClient.execute(`ALTER TABLE orders ADD COLUMN promo_code TEXT;`).catch(() => {});
     tursoClient.execute(`ALTER TABLE promotions ADD COLUMN once_per_customer INTEGER DEFAULT 1;`).catch(() => {});
     tursoClient.execute(`
@@ -493,14 +503,14 @@ function initDatabase() {
 }
 
 function seedLuckyWheelIfMissing() {
-  // Ensure default promotional vouchers for lucky wheel
+  // Ensure default promotional vouchers for lucky wheel (exclusive to wheel: is_wheel_reward = 1)
   const insertPromoIfMissing = (code, title, discountType, discountValue, minOrder) => {
     try {
       const exist = db.prepare('SELECT id FROM promotions WHERE code = ?').get(code);
       if (!exist) {
         db.prepare(`
-          INSERT INTO promotions (code, title, discount_type, discount_value, min_order_value, max_discount, max_uses, used_count, start_date, end_date, is_active, once_per_customer)
-          VALUES (?, ?, ?, ?, ?, ?, 9999, 0, ?, ?, 1, 1)
+          INSERT INTO promotions (code, title, discount_type, discount_value, min_order_value, max_discount, max_uses, used_count, start_date, end_date, is_active, once_per_customer, is_wheel_reward)
+          VALUES (?, ?, ?, ?, ?, ?, 9999, 0, ?, ?, 1, 1, 1)
         `).run(
           code,
           title,
@@ -511,17 +521,44 @@ function seedLuckyWheelIfMissing() {
           new Date(Date.now() - 7 * 86400000).toISOString(),
           new Date(Date.now() + 365 * 86400000).toISOString()
         );
+      } else {
+        db.prepare("UPDATE promotions SET is_wheel_reward = 1 WHERE code = ?").run(code);
       }
     } catch (e) {}
   };
 
-  insertPromoIfMissing('BAMICHAO', 'Giảm 10% cho đơn hàng từ 50.000đ', 'percent', 10, 50000);
-  insertPromoIfMissing('GIAM15K', 'Giảm 15.000đ cho đơn hàng từ 80.000đ', 'fixed', 15000, 80000);
   insertPromoIfMissing('QUAYTRUNG', 'Tặng 1 Trứng Ốp La (Giảm 6.000đ cho đơn từ 40.000đ)', 'fixed', 6000, 40000);
   insertPromoIfMissing('QUAYBANHMI', 'Tặng 1 Bánh Mì Que Hải Phòng (Giảm 15.000đ cho đơn từ 50.000đ)', 'fixed', 15000, 50000);
   insertPromoIfMissing('QUAYTRATAC', 'Tặng 1 Trà Tắc Hạt Chia (Giảm 18.000đ cho đơn từ 60.000đ)', 'fixed', 18000, 60000);
   insertPromoIfMissing('QUAYCAFE', 'Tặng 1 Cà Phê Sữa Đá (Giảm 20.000đ cho đơn từ 70.000đ)', 'fixed', 20000, 70000);
   insertPromoIfMissing('QUAY20K', 'Vòng Quay: Giảm ngay 20.000đ cho đơn từ 120.000đ', 'fixed', 20000, 120000);
+
+  // Standard public store vouchers (is_wheel_reward = 0)
+  const insertStorePromoIfMissing = (code, title, discountType, discountValue, minOrder) => {
+    try {
+      const exist = db.prepare('SELECT id FROM promotions WHERE code = ?').get(code);
+      if (!exist) {
+        db.prepare(`
+          INSERT INTO promotions (code, title, discount_type, discount_value, min_order_value, max_discount, max_uses, used_count, start_date, end_date, is_active, once_per_customer, is_wheel_reward)
+          VALUES (?, ?, ?, ?, ?, ?, 9999, 0, ?, ?, 1, 1, 0)
+        `).run(
+          code,
+          title,
+          discountType,
+          discountValue,
+          minOrder,
+          discountType === 'percent' ? 30000 : discountValue,
+          new Date(Date.now() - 7 * 86400000).toISOString(),
+          new Date(Date.now() + 365 * 86400000).toISOString()
+        );
+      } else {
+        db.prepare("UPDATE promotions SET is_wheel_reward = 0 WHERE code = ?").run(code);
+      }
+    } catch (e) {}
+  };
+
+  insertStorePromoIfMissing('BAMICHAO', 'Giảm 10% cho đơn hàng từ 50.000đ', 'percent', 10, 50000);
+  insertStorePromoIfMissing('GIAM15K', 'Giảm 15.000đ cho đơn hàng từ 80.000đ', 'fixed', 15000, 80000);
 
   // Default Lucky Wheel Rewards if empty
   try {

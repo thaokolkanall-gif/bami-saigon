@@ -31,8 +31,8 @@ export const LuckyWheelSection: React.FC<LuckyWheelSectionProps> = ({ onNavigate
   const [isEnabled, setIsEnabled] = useState(true);
   const [rule, setRule] = useState('daily');
   const [rewards, setRewards] = useState<WheelReward[]>([]);
-  const [canSpin, setCanSpin] = useState(false);
-  const [spinsLeft, setSpinsLeft] = useState(0);
+  const [canSpin, setCanSpin] = useState(true);
+  const [spinsLeft, setSpinsLeft] = useState(1);
   const [statusMessage, setStatusMessage] = useState('');
   const [isSpinning, setIsSpinning] = useState(false);
   const [wonReward, setWonReward] = useState<SpinResult | null>(null);
@@ -143,7 +143,7 @@ export const LuckyWheelSection: React.FC<LuckyWheelSectionProps> = ({ onNavigate
 
   useEffect(() => {
     fetchStatus();
-  }, [token]);
+  }, [token, customer]);
 
   // Draw wheel on canvas
   const drawWheel = (rotationAngle: number) => {
@@ -276,12 +276,12 @@ export const LuckyWheelSection: React.FC<LuckyWheelSectionProps> = ({ onNavigate
   // Handle spin action
   const handleSpin = async () => {
     if (isSpinning) return;
-    if (!token) {
+    if (!customer || !token) {
       openAuthModal('login');
       return;
     }
     if (!canSpin) {
-      alert(statusMessage || 'Hôm nay bạn đã dùng hết lượt quay. Hãy quay lại vào ngày mai nhé!');
+      alert(statusMessage || 'Hôm nay bạn đã dùng hết lượt quay miễn phí rồi. Hãy quay lại vào ngày mai nhé!');
       return;
     }
 
@@ -451,8 +451,14 @@ export const LuckyWheelSection: React.FC<LuckyWheelSectionProps> = ({ onNavigate
           <div className="w-full max-w-md mt-6 text-center">
             {!customer ? (
               <div className="p-4 bg-white/90 backdrop-blur-md rounded-2xl border border-amber-300 shadow-sm space-y-2">
-                <p className="text-xs text-[#4A2115] font-semibold">
-                  🎁 Bạn chưa đăng nhập. Vui lòng đăng nhập bằng số điện thoại để nhận ngay 1 lượt quay miễn phí hôm nay!
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-[#4A2115]">Chào bạn mới!</span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse">
+                    Tặng 1 lượt quay miễn phí
+                  </span>
+                </div>
+                <p className="text-xs text-[#4A2115] font-medium">
+                  🎁 Bạn có <strong>1 lượt quay miễn phí</strong> hôm nay! Hãy đăng nhập bằng số điện thoại để quay và nhận quà ngay.
                 </p>
                 <button
                   type="button"
@@ -471,9 +477,9 @@ export const LuckyWheelSection: React.FC<LuckyWheelSectionProps> = ({ onNavigate
                     <strong className="text-[#4A2115]">{customer.full_name || customer.phone}</strong>
                   </div>
                   <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                    canSpin ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-gray-100 text-gray-500'
+                    canSpin ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse' : 'bg-gray-100 text-gray-500'
                   }`}>
-                    {canSpin ? 'Còn 1 lượt quay' : 'Đã hết lượt hôm nay'}
+                    {canSpin ? 'Còn 1 lượt quay' : 'Đã quay hôm nay'}
                   </span>
                 </div>
 
@@ -489,7 +495,7 @@ export const LuckyWheelSection: React.FC<LuckyWheelSectionProps> = ({ onNavigate
                     }`}
                   >
                     <RotateCw className={`w-4 h-4 ${isSpinning ? 'animate-spin' : ''}`} />
-                    <span>{isSpinning ? 'Đang quay may mắn...' : canSpin ? 'Bấm vào đây để quay ngay!' : 'Hôm nay đã quay xong'}</span>
+                    <span>{isSpinning ? 'Đang quay may mắn...' : canSpin ? 'Bấm vào đây để quay ngay!' : 'Đã quay hôm nay • Hẹn gặp lại ngày mai'}</span>
                   </button>
 
                   {onOpenAccount && (

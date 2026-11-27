@@ -90,6 +90,11 @@ router.post('/claim', authenticateCustomer, (req, res) => {
       return res.status(404).json({ error: 'Mã voucher không tồn tại hoặc đã hết hiệu lực' });
     }
 
+    // Do not allow direct claiming of lucky wheel exclusive reward vouchers!
+    if (promo.is_wheel_reward === 1) {
+      return res.status(400).json({ error: 'Voucher này là phần thưởng độc quyền từ Vòng quay may mắn, không thể nhận trực tiếp!' });
+    }
+
     const now = new Date();
     if (promo.end_date && new Date(promo.end_date) < now) {
       return res.status(400).json({ error: 'Voucher này đã hết hạn sử dụng theo thời gian quy định' });
@@ -145,6 +150,7 @@ router.post('/claim', authenticateCustomer, (req, res) => {
 // - If Admin/Staff token: return all promotions for admin management
 // - If Public / Customer: return active promotions with personal claim status (chờ sử dụng / đã nhận / đã dùng)
 router.get('/', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -164,14 +170,14 @@ router.get('/', (req, res) => {
     }
   }
 
-  // Admin view
+  // Admin view: returns all promotions for management
   if (adminUser) {
     const promos = db.prepare('SELECT * FROM promotions ORDER BY id DESC').all();
     return res.json(promos);
   }
 
-  // Public / Customer view
-  const promos = db.prepare('SELECT * FROM promotions WHERE is_active = 1 ORDER BY id DESC').all();
+  // Public / Customer view: ONLY public store promotions, excluding exclusive wheel prizes!
+  const promos = db.prepare('SELECT * FROM promotions WHERE is_active = 1 AND (is_wheel_reward IS NULL OR is_wheel_reward = 0) ORDER BY id DESC').all();
 
   if (customerUser) {
     const claims = db.prepare('SELECT promotion_id, status FROM customer_promotions WHERE customer_id = ?').all(customerUser.id);

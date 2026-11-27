@@ -33,8 +33,8 @@ export const LuckyWheelWidget: React.FC<LuckyWheelWidgetProps> = ({ currentView,
   const [isEnabled, setIsEnabled] = useState(true);
   const [rule, setRule] = useState('daily');
   const [rewards, setRewards] = useState<WheelReward[]>([]);
-  const [canSpin, setCanSpin] = useState(false);
-  const [spinsLeft, setSpinsLeft] = useState(0);
+  const [canSpin, setCanSpin] = useState(true);
+  const [spinsLeft, setSpinsLeft] = useState(1);
   const [statusMessage, setStatusMessage] = useState('');
   const [isSpinning, setIsSpinning] = useState(false);
   const [wonReward, setWonReward] = useState<SpinResult | null>(null);
@@ -145,7 +145,7 @@ export const LuckyWheelWidget: React.FC<LuckyWheelWidgetProps> = ({ currentView,
 
   useEffect(() => {
     fetchStatus();
-  }, [token, isOpen]);
+  }, [token, customer, isOpen]);
 
   // Draw wheel on canvas
   const drawWheel = (rotationAngle: number) => {
@@ -285,12 +285,13 @@ export const LuckyWheelWidget: React.FC<LuckyWheelWidgetProps> = ({ currentView,
   // Handle spin action
   const handleSpin = async () => {
     if (isSpinning) return;
-    if (!token) {
+    if (!customer || !token) {
+      setIsOpen(false);
       openAuthModal('login');
       return;
     }
     if (!canSpin) {
-      alert(statusMessage || 'Hôm nay bạn đã dùng hết lượt quay. Hãy quay lại vào ngày mai nhé!');
+      alert(statusMessage || 'Hôm nay bạn đã dùng hết lượt quay miễn phí rồi. Hãy quay lại vào ngày mai nhé!');
       return;
     }
 
@@ -560,7 +561,7 @@ export const LuckyWheelWidget: React.FC<LuckyWheelWidgetProps> = ({ currentView,
                         : 'bg-white/20 text-white/50 cursor-not-allowed'
                     }`}
                   >
-                    {isSpinning ? 'Đang quay...' : canSpin ? 'Quay ngay' : 'Đã hết lượt'}
+                    {isSpinning ? 'Đang quay...' : canSpin ? 'Quay ngay' : 'Đã quay hôm nay'}
                   </button>
                 </div>
               )}
