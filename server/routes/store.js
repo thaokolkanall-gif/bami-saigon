@@ -82,6 +82,7 @@ router.post('/cloud-restore', authenticateToken, requireOwner, async (req, res) 
 
 // Get public store info & operational settings
 router.get('/settings', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   const rows = db.prepare('SELECT key, value FROM settings').all();
   const settings = {};
   for (const row of rows) {

@@ -37,7 +37,9 @@ export const AdminOperations: React.FC = () => {
   const [closeTime, setCloseTime] = useState(getInitialCloseTime);
 
   // Bank transfer toggle
-  const [allowBankTransfer, setAllowBankTransfer] = useState(settings?.allow_bank_transfer !== '0');
+  const [allowBankTransfer, setAllowBankTransfer] = useState(
+    settings?.allow_bank_transfer !== '0' && settings?.allow_bank_transfer !== 'false' && settings?.allow_bank_transfer !== false
+  );
 
   // Real-time check for open preview
   const isStoreOpenRealtime = (() => {
@@ -147,7 +149,9 @@ export const AdminOperations: React.FC = () => {
       setPrepTimeMax(settings.prep_time_max || '20');
       if (settings.open_time) setOpenTime(settings.open_time);
       if (settings.close_time) setCloseTime(settings.close_time);
-      setAllowBankTransfer(settings.allow_bank_transfer !== '0');
+      setAllowBankTransfer(
+        settings.allow_bank_transfer !== '0' && settings.allow_bank_transfer !== 'false' && settings.allow_bank_transfer !== false
+      );
       setStoreLat(settings.store_lat || '10.771971');
       setStoreLng(settings.store_lng || '106.692237');
       setGoogleMapUrl(settings.google_map_url || '');
@@ -252,6 +256,29 @@ export const AdminOperations: React.FC = () => {
     navigator.clipboard.writeText(webhookUrl);
     setCopiedWebhook(true);
     setTimeout(() => setCopiedWebhook(false), 2000);
+  };
+
+  // Quick toggle and save Bank Transfer
+  const handleToggleBankTransfer = async (checked: boolean) => {
+    setAllowBankTransfer(checked);
+    const token = localStorage.getItem('bami_token');
+    try {
+      await fetch('/api/store/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          allow_bank_transfer: checked ? '1' : '0'
+        })
+      });
+      await refreshSettings();
+      setFeedback(checked ? '✅ Đã BẬT thanh toán chuyển khoản VietQR!' : '🛑 Đã TẮT thanh toán chuyển khoản VietQR! Khách chỉ có thể chọn COD.');
+      setTimeout(() => setFeedback(''), 4000);
+    } catch (err) {
+      console.warn('Lỗi cập nhật nhanh:', err);
+    }
   };
 
   // Save all settings
@@ -731,7 +758,7 @@ export const AdminOperations: React.FC = () => {
           <input
             type="checkbox"
             checked={allowBankTransfer}
-            onChange={(e) => setAllowBankTransfer(e.target.checked)}
+            onChange={(e) => handleToggleBankTransfer(e.target.checked)}
             className="w-5 h-5 text-[#8C4A26] rounded-md cursor-pointer shrink-0 ml-4"
           />
         </label>

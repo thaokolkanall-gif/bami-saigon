@@ -19,6 +19,29 @@ export const AdminContent: React.FC = () => {
     setFormData((prev: any) => ({ ...prev, [key]: val }));
   };
 
+  const handleToggleBankTransfer = async (checked: boolean) => {
+    const val = checked ? '1' : '0';
+    handleChange('allow_bank_transfer', val);
+    const token = localStorage.getItem('bami_token');
+    try {
+      await fetch('/api/store/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          allow_bank_transfer: val
+        })
+      });
+      await refreshSettings();
+      setSuccessMessage(checked ? '✅ Đã BẬT thanh toán chuyển khoản VietQR!' : '🛑 Đã TẮT thanh toán chuyển khoản VietQR! Khách chỉ có thể thanh toán tiền mặt (COD).');
+      setTimeout(() => setSuccessMessage(''), 4000);
+    } catch (err) {
+      console.warn('Lỗi cập nhật nhanh:', err);
+    }
+  };
+
   const handleUpload = async (key: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -284,6 +307,38 @@ export const AdminContent: React.FC = () => {
                 className="w-full px-3.5 py-2.5 rounded-xl border border-amber-200 text-xs"
               />
             </div>
+          </div>
+
+          {/* Bật / Tắt nhận chuyển khoản VietQR */}
+          <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200 flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-xs text-[#4A2115]">
+                  Bật nhận thanh toán chuyển khoản VietQR
+                </span>
+                <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                  formData.allow_bank_transfer !== '0' && formData.allow_bank_transfer !== 'false' && formData.allow_bank_transfer !== false
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : 'bg-gray-200 text-gray-600 border border-gray-300'
+                }`}>
+                  {formData.allow_bank_transfer !== '0' && formData.allow_bank_transfer !== 'false' && formData.allow_bank_transfer !== false ? 'Đang bật' : 'Đang tắt'}
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1">
+                {formData.allow_bank_transfer !== '0' && formData.allow_bank_transfer !== 'false' && formData.allow_bank_transfer !== false
+                  ? 'Khách hàng có thể chọn Quét mã VietQR chuyển khoản trước khi đặt bánh.'
+                  : 'Đang tắt: Khách hàng chỉ có thể thanh toán tiền mặt (COD). Tùy chọn chuyển khoản VietQR trên trang đặt hàng sẽ bị khóa hoàn toàn.'}
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
+              <input
+                type="checkbox"
+                checked={formData.allow_bank_transfer !== '0' && formData.allow_bank_transfer !== 'false' && formData.allow_bank_transfer !== false}
+                onChange={(e) => handleToggleBankTransfer(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#8C4A26]"></div>
+            </label>
           </div>
 
           <div className="pt-2 border-t border-amber-100 grid grid-cols-1 sm:grid-cols-3 gap-4">

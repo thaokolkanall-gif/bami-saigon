@@ -19,8 +19,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const fetchSettings = async () => {
     try {
       const [resSettings, resZones] = await Promise.all([
-        fetch('/api/store/settings'),
-        fetch('/api/store/zones')
+        fetch('/api/store/settings', { cache: 'no-store' }),
+        fetch('/api/store/zones', { cache: 'no-store' })
       ]);
 
       if (resSettings.ok) {

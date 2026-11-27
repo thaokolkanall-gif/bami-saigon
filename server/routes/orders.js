@@ -122,7 +122,7 @@ router.post('/', rateLimiter({ windowMs: 60000, max: 15, message: 'Bạn đang g
   // Check bank transfer payment permission
   if (payment_method === 'transfer') {
     const transferSetting = db.prepare("SELECT value FROM settings WHERE key = 'allow_bank_transfer'").get();
-    if (transferSetting?.value === '0') {
+    if (transferSetting?.value === '0' || transferSetting?.value === 'false' || transferSetting?.value === 'off') {
       return res.status(400).json({ error: 'Quán hiện đang tạm tắt nhận thanh toán chuyển khoản. Quý khách vui lòng chọn thanh toán tiền mặt khi nhận hàng (COD).' });
     }
   }

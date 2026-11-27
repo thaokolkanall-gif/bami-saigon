@@ -84,7 +84,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
   } | null>(null);
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
 
-  const isBankTransferAllowed = settings?.allow_bank_transfer !== '0';
+  const isBankTransferAllowed = Boolean(
+    settings &&
+    settings.allow_bank_transfer !== '0' &&
+    settings.allow_bank_transfer !== 0 &&
+    settings.allow_bank_transfer !== 'false' &&
+    settings.allow_bank_transfer !== false &&
+    settings.bank_account &&
+    String(settings.bank_account).trim() !== ''
+  );
 
   useEffect(() => {
     if (!isBankTransferAllowed && paymentMethod === 'transfer') {
@@ -158,6 +166,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
 
     // Prepare payload
     const idempotencyKey = `ord_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const finalPaymentMethod = isBankTransferAllowed && paymentMethod === 'transfer' ? 'transfer' : 'cod';
     const payload = {
       customer_name: customerName,
       customer_phone: customerPhone,
@@ -169,7 +178,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
       customer_lng: orderType === 'delivery' ? customerLng : null,
       pickup_time: orderType === 'pickup' ? pickupTime : null,
       order_note: orderNote,
-      payment_method: paymentMethod,
+      payment_method: finalPaymentMethod,
       items: items.map(item => ({
         product_id: item.product_id,
         quantity: item.quantity,
@@ -179,7 +188,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
       promo_code: promoCode || null,
       idempotency_key: idempotencyKey,
       customer_id: customer?.id || null,
-      is_prepaid: paymentMethod === 'transfer' ? 1 : 0
+      is_prepaid: finalPaymentMethod === 'transfer' ? 1 : 0
     };
 
     try {
@@ -554,7 +563,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
                 </div>
               </label>
 
-              {isBankTransferAllowed && (
+              {isBankTransferAllowed ? (
                 <label 
                   className={`flex items-start gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
                     paymentMethod === 'transfer' ? 'border-[#8C4A26] bg-[#FFF8E8]' : 'border-amber-200/80 hover:bg-gray-50'
@@ -602,6 +611,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onBackToMenu, onOrde
                     )}
                   </div>
                 </label>
+              ) : (
+                <div className="p-3 bg-amber-50/60 border border-amber-200/70 rounded-2xl flex items-center gap-2 text-xs text-[#8C4A26]">
+                  <AlertCircle className="w-4 h-4 text-[#8C4A26] shrink-0" />
+                  <span>Hiện tại quán chỉ nhận thanh toán tiền mặt khi nhận hàng (COD). Tùy chọn chuyển khoản QR đang tạm tắt.</span>
+                </div>
               )}
             </div>
           </div>
