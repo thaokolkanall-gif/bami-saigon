@@ -147,26 +147,36 @@ router.post('/setup', authenticateToken, requireOwner, (req, res) => {
   } = req.body;
 
   const updateStmt = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP');
+  const syncSql = 'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP';
 
+  const setupData = [];
   const transaction = db.transaction(() => {
-    if (store_name) updateStmt.run('store_name', store_name);
-    if (slogan) updateStmt.run('slogan', slogan);
-    if (phone) updateStmt.run('phone', phone);
-    if (address) updateStmt.run('address', address);
-    if (zalo) updateStmt.run('zalo', zalo);
-    if (opening_hours) updateStmt.run('opening_hours', typeof opening_hours === 'object' ? JSON.stringify(opening_hours) : opening_hours);
-    if (bank_name) updateStmt.run('bank_name', bank_name);
-    if (bank_account) updateStmt.run('bank_account', bank_account);
-    if (bank_owner) updateStmt.run('bank_owner', bank_owner);
-    if (allow_pickup !== undefined) updateStmt.run('allow_pickup', allow_pickup ? '1' : '0');
-    if (allow_delivery !== undefined) updateStmt.run('allow_delivery', allow_delivery ? '1' : '0');
-    if (prep_time_min) updateStmt.run('prep_time_min', String(prep_time_min));
-    if (prep_time_max) updateStmt.run('prep_time_max', String(prep_time_max));
-    updateStmt.run('is_configured', '1');
-    updateStmt.run('is_online_ordering_enabled', '1');
+    if (store_name) { updateStmt.run('store_name', store_name); setupData.push(['store_name', store_name]); }
+    if (slogan) { updateStmt.run('slogan', slogan); setupData.push(['slogan', slogan]); }
+    if (phone) { updateStmt.run('phone', phone); setupData.push(['phone', phone]); }
+    if (address) { updateStmt.run('address', address); setupData.push(['address', address]); }
+    if (zalo) { updateStmt.run('zalo', zalo); setupData.push(['zalo', zalo]); }
+    if (opening_hours) {
+      const ohStr = typeof opening_hours === 'object' ? JSON.stringify(opening_hours) : opening_hours;
+      updateStmt.run('opening_hours', ohStr); setupData.push(['opening_hours', ohStr]);
+    }
+    if (bank_name) { updateStmt.run('bank_name', bank_name); setupData.push(['bank_name', bank_name]); }
+    if (bank_account) { updateStmt.run('bank_account', bank_account); setupData.push(['bank_account', bank_account]); }
+    if (bank_owner) { updateStmt.run('bank_owner', bank_owner); setupData.push(['bank_owner', bank_owner]); }
+    if (allow_pickup !== undefined) { const v = allow_pickup ? '1' : '0'; updateStmt.run('allow_pickup', v); setupData.push(['allow_pickup', v]); }
+    if (allow_delivery !== undefined) { const v = allow_delivery ? '1' : '0'; updateStmt.run('allow_delivery', v); setupData.push(['allow_delivery', v]); }
+    if (prep_time_min) { updateStmt.run('prep_time_min', String(prep_time_min)); setupData.push(['prep_time_min', String(prep_time_min)]); }
+    if (prep_time_max) { updateStmt.run('prep_time_max', String(prep_time_max)); setupData.push(['prep_time_max', String(prep_time_max)]); }
+    updateStmt.run('is_configured', '1'); setupData.push(['is_configured', '1']);
+    updateStmt.run('is_online_ordering_enabled', '1'); setupData.push(['is_online_ordering_enabled', '1']);
   });
 
   transaction();
+
+  // Sync all setup data to Turso Cloud
+  for (const [key, value] of setupData) {
+    syncWriteToCloud(syncSql, [key, value]);
+  }
 
   db.prepare('INSERT INTO audit_logs (username, action, details) VALUES (?, ?, ?)')
     .run(req.user.username, 'Hoàn thành trình thiết lập ban đầu (Setup Wizard)', 'Khởi tạo thông tin kinh doanh chính thức');
@@ -191,6 +201,9 @@ router.post('/zones', authenticateToken, requireOwner, (req, res) => {
     parseInt(min_order) || 0,
     estimated_time || '20-30 phút'
   );
+  syncWriteToCloud('INSERT INTO delivery_zones (id, zone_name, fee, min_order, estimated_time) VALUES (?, ?, ?, ?, ?)', [
+    result.lastInsertRowid, zone_name, parseInt(fee) || 0, parseInt(min_order) || 0, estimated_time || '20-30 phút'
+  ]);
   res.json({ success: true, id: result.lastInsertRowid });
 });
 
@@ -209,12 +222,17 @@ router.put('/zones/:id', authenticateToken, requireOwner, (req, res) => {
     is_active ? 1 : 0,
     id
   );
+  syncWriteToCloud(
+    'UPDATE delivery_zones SET zone_name = ?, fee = ?, min_order = ?, estimated_time = ?, is_active = ? WHERE id = ?',
+    [zone_name, parseInt(fee) || 0, parseInt(min_order) || 0, estimated_time || '20-30 phút', is_active ? 1 : 0, id]
+  );
   res.json({ success: true });
 });
 
 router.delete('/zones/:id', authenticateToken, requireOwner, (req, res) => {
   const { id } = req.params;
   db.prepare('DELETE FROM delivery_zones WHERE id = ?').run(id);
+  syncWriteToCloud('DELETE FROM delivery_zones WHERE id = ?', [id]);
   res.json({ success: true });
 });
 
