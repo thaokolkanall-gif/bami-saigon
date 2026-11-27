@@ -28,10 +28,25 @@ if (tursoUrl && tursoToken) {
 }
 
 // Helper: Synchronize local SQLite with Turso Cloud on server startup
+// CHIẾN LƯỢC: Local SQLite là nguồn sự thật chính.
+// - Nếu local CÓ DỮ LIỆU → backup local lên Cloud (không ghi đè local từ Cloud)
+// - Nếu local TRỐNG hoàn toàn (server mới) → kéo dữ liệu từ Cloud về
 async function syncFromCloudOnStart() {
   if (!tursoClient) return;
   try {
-    console.log('🔄 Đang đồng bộ dữ liệu mới nhất từ Turso Cloud về máy chủ...');
+    // Kiểm tra dữ liệu local trước
+    const localProductCount = db.prepare('SELECT COUNT(*) as count FROM products').get();
+    
+    if (localProductCount && localProductCount.count > 0) {
+      // LOCAL CÓ DỮ LIỆU → Chỉ backup local lên Cloud, KHÔNG ghi đè local
+      console.log(`✅ Local SQLite có sẵn ${localProductCount.count} sản phẩm. Đang backup local → Cloud để đảm bảo đồng bộ...`);
+      const backedUp = await backupAllToCloud();
+      console.log(`💾 Đã backup ${backedUp} bản ghi local lên Turso Cloud an toàn.`);
+      return;
+    }
+
+    // LOCAL TRỐNG → Server mới hoàn toàn, kéo dữ liệu từ Cloud về
+    console.log('🔄 Local trống. Đang khôi phục dữ liệu từ Turso Cloud...');
     const tablesRes = await tursoClient.execute("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'test_%'");
     
     if (!tablesRes.rows || tablesRes.rows.length === 0) {
@@ -39,16 +54,14 @@ async function syncFromCloudOnStart() {
       return;
     }
 
-    // Check if Turso has data in products
     const prodCheck = await tursoClient.execute("SELECT COUNT(*) as count FROM products");
-    if (prodCheck.rows[0].count === 0) {
-      console.log('Turso Cloud chưa có dữ liệu sản phẩm, giữ nguyên dữ liệu gốc.');
+    if (!prodCheck.rows[0] || prodCheck.rows[0].count === 0) {
+      console.log('Turso Cloud chưa có dữ liệu, bỏ qua.');
       return;
     }
 
     const syncTx = db.transaction(() => {
       for (const t of tablesRes.rows) {
-        // Ensure table creation uses IF NOT EXISTS
         const createSql = t.sql.replace(/CREATE TABLE\s+(?!IF NOT EXISTS)/i, 'CREATE TABLE IF NOT EXISTS ');
         db.exec(createSql);
       }
@@ -71,7 +84,7 @@ async function syncFromCloudOnStart() {
         insertMany(rowsRes.rows);
       }
     }
-    console.log('🎉 Đồng bộ thành công 100% dữ liệu từ Turso Cloud! Không bao giờ bị mất dữ liệu cũ.');
+    console.log('🎉 Khôi phục thành công 100% dữ liệu từ Turso Cloud về server mới!');
 
     // Tự động khôi phục tất cả tệp ảnh từ bảng uploaded_images vào thư mục uploads/ trên ổ đĩa
     try {
