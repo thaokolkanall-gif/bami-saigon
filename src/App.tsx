@@ -165,7 +165,10 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1">
         {currentView === 'home' && (
-          <HomePage onNavigate={(view) => navigateTo(view)} />
+          <HomePage
+            onNavigate={(view) => navigateTo(view)}
+            onOpenAccount={() => setIsAccountModalOpen(true)}
+          />
         )}
 
         {currentView === 'menu' && (
@@ -216,6 +219,7 @@ export default function App() {
 
       {/* Vòng quay may mắn */}
       <LuckyWheelWidget
+        currentView={currentView}
         onNavigate={(view) => navigateTo(view)}
         onOpenAccount={() => setIsAccountModalOpen(true)}
       />

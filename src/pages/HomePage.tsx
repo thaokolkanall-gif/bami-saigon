@@ -5,12 +5,14 @@ import { useCustomer } from '../context/CustomerContext';
 import { useCart } from '../context/CartContext';
 import { Product, Combo, Promotion, Topping } from '../types';
 import { DishDetailModal } from '../components/DishDetailModal';
+import { LuckyWheelSection } from '../components/LuckyWheelSection';
 
 interface HomePageProps {
   onNavigate: (view: string) => void;
+  onOpenAccount?: () => void;
 }
 
-export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
+export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onOpenAccount }) => {
   const { settings } = useStore();
   const { customer, openAuthModal } = useCustomer();
   const { setPromoCode } = useCart();
@@ -266,6 +268,12 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           </div>
         </section>
       )}
+
+      {/* 🎡 VÒNG QUAY MAY MẮN HIỂN THỊ TO GIỮA MÀN HÌNH (DƯỚI KHỐI ƯU ĐÃI VOUCHER) */}
+      <LuckyWheelSection
+        onNavigate={onNavigate}
+        onOpenAccount={onOpenAccount}
+      />
 
       {/* 1. HERO SECTION */}
       <section className="relative overflow-hidden bg-gradient-to-b from-[#F5BD42]/20 via-[#FFF8E8] to-[#FFF8E8] pt-8 sm:pt-16 pb-12 sm:pb-20">

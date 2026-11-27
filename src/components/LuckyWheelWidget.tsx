@@ -22,11 +22,12 @@ interface SpinResult {
 }
 
 interface LuckyWheelWidgetProps {
+  currentView?: string;
   onNavigate?: (view: string) => void;
   onOpenAccount?: () => void;
 }
 
-export const LuckyWheelWidget: React.FC<LuckyWheelWidgetProps> = ({ onNavigate, onOpenAccount }) => {
+export const LuckyWheelWidget: React.FC<LuckyWheelWidgetProps> = ({ currentView, onNavigate, onOpenAccount }) => {
   const { customer, token, openAuthModal, refreshProfile } = useCustomer();
   const [isOpen, setIsOpen] = useState(false);
   const [isEnabled, setIsEnabled] = useState(true);
@@ -392,8 +393,9 @@ export const LuckyWheelWidget: React.FC<LuckyWheelWidgetProps> = ({ onNavigate, 
     }
   };
 
-  // Do not render anything if the feature is completely disabled by admin
+  // Do not render anything if the feature is completely disabled by admin or on home page (where wheel is already displayed large)
   if (!isEnabled) return null;
+  if (currentView === 'home' && !isOpen) return null;
 
   return (
     <>
