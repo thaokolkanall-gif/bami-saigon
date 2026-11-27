@@ -28,35 +28,64 @@ if (tursoUrl && tursoToken) {
 }
 
 // Helper: Synchronize local SQLite with Turso Cloud on server startup
-// CHIẾN LƯỢC: Local SQLite là nguồn sự thật chính.
-// - Nếu local CÓ DỮ LIỆU → backup local lên Cloud (không ghi đè local từ Cloud)
-// - Nếu local TRỐNG hoàn toàn (server mới) → kéo dữ liệu từ Cloud về
+// CHIẾN LƯỢC AN TOÀN TUYỆT ĐỐI:
+// 1. Nếu local CÓ DỮ LIỆU SẢN PHẨM → backup local lên Cloud, sau đó merge thêm bản ghi
+//    còn thiếu từ Cloud vào local (INSERT OR IGNORE - không ghi đè bất kỳ bản ghi nào)
+// 2. Nếu local TRỐNG hoàn toàn (server mới) → kéo toàn bộ từ Cloud về
+// => Không bao giờ mất dữ liệu dù server restart hay deploy lại
 async function syncFromCloudOnStart() {
   if (!tursoClient) return;
+
+  // Các bảng giao dịch cần merge thêm từ Cloud (không ghi đè local)
+  const MERGE_TABLES = [
+    'orders', 'order_items', 'order_history',
+    'customers', 'customer_promotions',
+    'notifications', 'audit_logs', 'lucky_wheel_spins'
+  ];
+
   try {
-    // Kiểm tra dữ liệu local trước
     const localProductCount = db.prepare('SELECT COUNT(*) as count FROM products').get();
     
     if (localProductCount && localProductCount.count > 0) {
-      // LOCAL CÓ DỮ LIỆU → Chỉ backup local lên Cloud, KHÔNG ghi đè local
-      console.log(`✅ Local SQLite có sẵn ${localProductCount.count} sản phẩm. Đang backup local → Cloud để đảm bảo đồng bộ...`);
+      // LOCAL CÓ DỮ LIỆU → Backup lên Cloud trước
+      console.log(`✅ Local có ${localProductCount.count} sản phẩm. Đang backup local → Cloud...`);
       const backedUp = await backupAllToCloud();
-      console.log(`💾 Đã backup ${backedUp} bản ghi local lên Turso Cloud an toàn.`);
+      console.log(`💾 Đã backup ${backedUp} bản ghi lên Turso Cloud.`);
+
+      // Sau đó merge thêm bản ghi còn thiếu từ Cloud vào Local (INSERT OR IGNORE)
+      let mergedCount = 0;
+      for (const tname of MERGE_TABLES) {
+        try {
+          const cloudRows = await tursoClient.execute(`SELECT * FROM "${tname}" ORDER BY id`);
+          if (!cloudRows.rows || cloudRows.rows.length === 0) continue;
+          const keys = Object.keys(cloudRows.rows[0]);
+          const cols = keys.map(k => `"${k}"`).join(', ');
+          const placeholders = keys.map(() => '?').join(', ');
+          const stmt = db.prepare(`INSERT OR IGNORE INTO "${tname}" (${cols}) VALUES (${placeholders})`);
+          for (const row of cloudRows.rows) {
+            const result = stmt.run(keys.map(k => row[k]));
+            if (result.changes > 0) mergedCount++;
+          }
+        } catch (e) { /* bỏ qua lỗi từng bảng */ }
+      }
+      if (mergedCount > 0) {
+        console.log(`🔄 Đã phục hồi thêm ${mergedCount} bản ghi còn thiếu từ Cloud về Local.`);
+      }
       return;
     }
 
-    // LOCAL TRỐNG → Server mới hoàn toàn, kéo dữ liệu từ Cloud về
-    console.log('🔄 Local trống. Đang khôi phục dữ liệu từ Turso Cloud...');
+    // LOCAL TRỐNG → Server mới hoàn toàn, kéo toàn bộ từ Cloud về
+    console.log('🔄 Local trống. Đang khôi phục toàn bộ từ Turso Cloud...');
     const tablesRes = await tursoClient.execute("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'test_%'");
     
     if (!tablesRes.rows || tablesRes.rows.length === 0) {
-      console.log('Turso Cloud trống, bỏ qua đồng bộ ban đầu.');
+      console.log('Turso Cloud trống, bỏ qua.');
       return;
     }
 
     const prodCheck = await tursoClient.execute("SELECT COUNT(*) as count FROM products");
     if (!prodCheck.rows[0] || prodCheck.rows[0].count === 0) {
-      console.log('Turso Cloud chưa có dữ liệu, bỏ qua.');
+      console.log('Turso Cloud chưa có dữ liệu sản phẩm, bỏ qua.');
       return;
     }
 
@@ -75,7 +104,6 @@ async function syncFromCloudOnStart() {
         const cols = keys.map(k => `"${k}"`).join(', ');
         const placeholders = keys.map(() => '?').join(', ');
         const insertStmt = db.prepare(`INSERT OR REPLACE INTO "${t.name}" (${cols}) VALUES (${placeholders})`);
-        
         const insertMany = db.transaction((rows) => {
           for (const row of rows) {
             insertStmt.run(keys.map(k => row[k]));
